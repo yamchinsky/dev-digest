@@ -64,6 +64,10 @@ export const RunStats = z.object({
   tokens_out: z.number().int(),
   findings: z.number().int(),
   grounding: z.string(),
+  // Cost (USD) of this single run; computed on read via PriceBook (NOT
+  // persisted on the trace document). null = unknown model or run had no
+  // token data (e.g. failed before any LLM call).
+  cost_usd: z.number().nullable(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 
@@ -110,5 +114,9 @@ export const RunSummary = z.object({
   // findings that trip the agent's gate. Null on failed/cancelled runs.
   score: z.number().int().nullable(),
   blockers: z.number().int().nullable(),
+  // Cost (USD) for this run; computed on read via PriceBook from model +
+  // tokens_in/tokens_out. null on running/failed/cancelled runs or when the
+  // model is unknown to the price book.
+  cost_usd: z.number().nullable(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;

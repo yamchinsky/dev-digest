@@ -66,9 +66,19 @@ export class ReviewService {
     return this.repo.activeRunsForPull(workspaceId, prId);
   }
 
-  /** All runs for a PR (any status), newest first — the run history (incl. failures). */
+  /** All runs for a PR (any status), newest first — the run history (incl. failures).
+   *  Cost is injected per row via PriceBook so a single source of truth lives
+   *  server-side; nothing about cost is persisted on the run row itself. */
   async listRuns(workspaceId: string, prId: string) {
-    return this.repo.listRunsForPull(workspaceId, prId);
+    const rows = await this.repo.listRunsForPull(workspaceId, prId);
+    const priceBook = this.container.priceBook;
+    return rows.map((r) => ({
+      ...r,
+      cost_usd:
+        r.status === 'done' && r.model && r.tokens_in != null && r.tokens_out != null
+          ? priceBook.estimate(r.model, r.tokens_in, r.tokens_out)
+          : null,
+    }));
   }
 
   /** Delete one run from the history (+ its trace). */
@@ -174,6 +184,18 @@ export class ReviewService {
   }
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {
-    return this.repo.getRunTrace(runId);
+    const trace = await this.repo.getRunTrace(runId);
+    if (!trace) return undefined;
+    // Cost is computed at read time so the displayed value tracks any pricing
+    // change (e.g. an OpenRouter refresh) without touching persisted traces.
+    const inputs = await this.repo.getRunCostInputs(runId);
+    const cost =
+      inputs?.status === 'done' &&
+      inputs.model &&
+      inputs.tokensIn != null &&
+      inputs.tokensOut != null
+        ? this.container.priceBook.estimate(inputs.model, inputs.tokensIn, inputs.tokensOut)
+        : null;
+    return { ...trace, stats: { ...trace.stats, cost_usd: cost } };
   }
 }

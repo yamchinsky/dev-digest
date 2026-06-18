@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { RunSummary, RunTrace } from '@devdigest/shared';
@@ -64,6 +64,9 @@ export async function listRunsForPull(
     ran_at: run.ranAt ? run.ranAt.toISOString() : null,
     score: run.score,
     blockers: run.blockers,
+    // cost_usd is injected by the service via PriceBook (computed on read so a
+    // price refresh propagates without rewriting persisted rows).
+    cost_usd: null,
   }));
 }
 
@@ -183,4 +186,50 @@ export async function saveRunTrace(db: Db, runId: string, trace: RunTrace): Prom
 export async function getRunTrace(db: Db, runId: string): Promise<RunTrace | undefined> {
   const [row] = await db.select().from(t.runTraces).where(eq(t.runTraces.runId, runId));
   return row ? (row.trace as RunTrace) : undefined;
+}
+
+/** Minimal projection used to compute cost on-the-fly. Returns undefined when
+ *  the run row doesn't exist (caller treats it as cost = null). */
+export async function getRunCostInputs(
+  db: Db,
+  runId: string,
+): Promise<
+  | { status: string | null; model: string | null; tokensIn: number | null; tokensOut: number | null }
+  | undefined
+> {
+  const [row] = await db
+    .select({
+      status: t.agentRuns.status,
+      model: t.agentRuns.model,
+      tokensIn: t.agentRuns.tokensIn,
+      tokensOut: t.agentRuns.tokensOut,
+    })
+    .from(t.agentRuns)
+    .where(eq(t.agentRuns.id, runId));
+  return row;
+}
+
+/** Token + model rows for all DONE runs across a set of PRs — used by the PR
+ *  list to aggregate cost per PR. Returns no rows when the input is empty. */
+export async function tokensForDoneRunsByPulls(
+  db: Db,
+  workspaceId: string,
+  prIds: string[],
+): Promise<{ prId: string | null; model: string | null; tokensIn: number | null; tokensOut: number | null }[]> {
+  if (prIds.length === 0) return [];
+  return db
+    .select({
+      prId: t.agentRuns.prId,
+      model: t.agentRuns.model,
+      tokensIn: t.agentRuns.tokensIn,
+      tokensOut: t.agentRuns.tokensOut,
+    })
+    .from(t.agentRuns)
+    .where(
+      and(
+        eq(t.agentRuns.workspaceId, workspaceId),
+        eq(t.agentRuns.status, 'done'),
+        inArray(t.agentRuns.prId, prIds),
+      ),
+    );
 }

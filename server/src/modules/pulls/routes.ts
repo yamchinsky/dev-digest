@@ -129,6 +129,32 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // Cost per PR = sum of cost_usd for every DONE agent_run. Computed on read
+    // via PriceBook (no cost column on agent_runs). Per-row null estimates
+    // (unknown model) are skipped; a PR with zero DONE runs OR all-unknown
+    // estimates lands as null — never $0.00, per spec.
+    const costByPr = new Map<string, number | null>();
+    if (prIds.length > 0) {
+      const tokenRows = await container.reviewRepo.tokensForDoneRunsByPulls(workspaceId, prIds);
+      const priceBook = container.priceBook;
+      for (const row of tokenRows) {
+        if (!row.prId) continue; // orphan run (pr deleted) — skip
+        const estimate =
+          row.model && row.tokensIn != null && row.tokensOut != null
+            ? priceBook.estimate(row.model, row.tokensIn, row.tokensOut)
+            : null;
+        const prior = costByPr.get(row.prId);
+        if (estimate == null) {
+          // First sighting of a null-cost row marks the PR as "had a run" but
+          // contributes 0 to the sum. We promote to a number once any non-null
+          // estimate arrives for the same PR.
+          if (!costByPr.has(row.prId)) costByPr.set(row.prId, null);
+        } else {
+          costByPr.set(row.prId, (prior ?? 0) + estimate);
+        }
+      }
+    }
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -153,6 +179,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        cost_usd: costByPr.get(r.id) ?? null,
       };
     });
   });

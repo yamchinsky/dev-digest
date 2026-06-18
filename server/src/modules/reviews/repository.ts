@@ -181,4 +181,22 @@ export class ReviewRepository {
   getRunTrace(runId: string): Promise<RunTrace | undefined> {
     return runRepo.getRunTrace(this.db, runId);
   }
+
+  /** Minimal `agent_runs` projection used to compute cost on read. */
+  getRunCostInputs(
+    runId: string,
+  ): Promise<
+    | { status: string | null; model: string | null; tokensIn: number | null; tokensOut: number | null }
+    | undefined
+  > {
+    return runRepo.getRunCostInputs(this.db, runId);
+  }
+
+  /** Token+model rows for all DONE runs in a set of PRs (for PR list cost agg). */
+  tokensForDoneRunsByPulls(
+    workspaceId: string,
+    prIds: string[],
+  ): Promise<{ prId: string | null; model: string | null; tokensIn: number | null; tokensOut: number | null }[]> {
+    return runRepo.tokensForDoneRunsByPulls(this.db, workspaceId, prIds);
+  }
 }
