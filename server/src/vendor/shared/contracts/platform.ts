@@ -170,6 +170,11 @@ export const PrMeta = z.object({
   updated_at: z.string().nullish(),
   // Latest-review score (list endpoint only; null/absent until reviewed).
   score: z.number().int().nullish(),
+  // Sum of cost (USD) across all completed agent runs for this PR; computed
+  // on-the-fly via PriceBook. null when no done runs exist OR every done run's
+  // model is unknown to the price book. Never 0 for "no data" — only when an
+  // actual zero-cost run (e.g. a free model) is the only signal.
+  cost_usd: z.number().nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 
