@@ -111,21 +111,94 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest-review SCORE per PR for the list's score ring. Computed on read
-    // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // Latest-review SCORE + per-severity FINDINGS breakdown per PR. Both
+    // derived from the same "latest 'review' kind row per PR" so the score
+    // ring and the FINDINGS column never disagree about which run they
+    // reflect. Computed on read (no FK denorm); the list is small, so two
+    // IN-queries + JS grouping is cheap.
     const prIds = rows.map((r) => r.id);
-    const latestReviewByPr = new Map<string, { score: number | null }>();
+    const latestReviewByPr = new Map<
+      string,
+      { reviewId: string; score: number | null }
+    >();
     if (prIds.length > 0) {
       const reviewRows = await container.db
-        .select({ prId: t.reviews.prId, score: t.reviews.score })
+        .select({ prId: t.reviews.prId, reviewId: t.reviews.id, score: t.reviews.score })
         .from(t.reviews)
         .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
         .orderBy(desc(t.reviews.createdAt));
       // Rows are newest-first → first seen per PR is the latest review.
       for (const rv of reviewRows) {
-        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
+        if (!latestReviewByPr.has(rv.prId))
+          latestReviewByPr.set(rv.prId, { reviewId: rv.reviewId, score: rv.score });
+      }
+    }
+
+    // Per-severity counts + sparse finding items for the FINDINGS column.
+    // Scoped to the latest review's id only (same scope as the score ring).
+    // rationale_excerpt clamped to RATIONALE_CLAMP chars to keep payload sane
+    // for repos with many PRs.
+    const RATIONALE_CLAMP = 200;
+    type ListFindingItem = {
+      severity: 'CRITICAL' | 'WARNING' | 'SUGGESTION';
+      category: 'bug' | 'security' | 'perf' | 'style' | 'test';
+      title: string;
+      file: string;
+      start_line: number;
+      end_line: number;
+      confidence: number;
+      rationale_excerpt: string;
+    };
+    type ListFindings = {
+      counts: { CRITICAL: number; WARNING: number; SUGGESTION: number };
+      items: ListFindingItem[];
+    };
+    const findingsByPr = new Map<string, ListFindings>();
+    const latestReviewIds = [...latestReviewByPr.values()].map((r) => r.reviewId);
+    if (latestReviewIds.length > 0) {
+      const reviewIdToPrId = new Map<string, string>();
+      for (const [prId, { reviewId }] of latestReviewByPr.entries()) {
+        reviewIdToPrId.set(reviewId, prId);
+      }
+      const findingRows = await container.db
+        .select({
+          reviewId: t.findings.reviewId,
+          severity: t.findings.severity,
+          category: t.findings.category,
+          title: t.findings.title,
+          file: t.findings.file,
+          startLine: t.findings.startLine,
+          endLine: t.findings.endLine,
+          confidence: t.findings.confidence,
+          rationale: t.findings.rationale,
+        })
+        .from(t.findings)
+        .where(inArray(t.findings.reviewId, latestReviewIds));
+      for (const f of findingRows) {
+        const prId = reviewIdToPrId.get(f.reviewId);
+        if (!prId) continue;
+        let agg = findingsByPr.get(prId);
+        if (!agg) {
+          agg = { counts: { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 }, items: [] };
+          findingsByPr.set(prId, agg);
+        }
+        const sev = f.severity as keyof ListFindings['counts'];
+        if (sev === 'CRITICAL' || sev === 'WARNING' || sev === 'SUGGESTION') {
+          agg.counts[sev] += 1;
+        }
+        agg.items.push({
+          severity: f.severity as ListFindingItem['severity'],
+          category: f.category as ListFindingItem['category'],
+          title: f.title,
+          file: f.file,
+          start_line: f.startLine,
+          end_line: f.endLine,
+          confidence: f.confidence,
+          rationale_excerpt:
+            f.rationale.length > RATIONALE_CLAMP
+              ? f.rationale.slice(0, RATIONALE_CLAMP).trimEnd() + '…'
+              : f.rationale,
+        });
       }
     }
 
@@ -180,6 +253,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
         cost_usd: costByPr.get(r.id) ?? null,
+        findings: findingsByPr.get(r.id) ?? null,
       };
     });
   });

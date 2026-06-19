@@ -91,9 +91,14 @@
       "author": "Author",
       "size": "Size",
       "score": "Score",
+      "findings": "Findings",
       "cost": "Cost",
       "status": "Status",
       "updated": "Updated"
+    },
+    "findingsCell": {
+      "empty": "—",
+      "tooltipTitle": "{count, plural, one {# finding} other {# findings}}"
     },
     "filesCount": "{count} files",
     "errorTitle": "Couldn’t load pull requests",
