@@ -4,18 +4,31 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Icon, SEV, SeverityBadge, CategoryTag } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
 import { s } from "./styles";
 
 const SEVERITY_ORDER = ["CRITICAL", "WARNING", "SUGGESTION"] as const;
+const TOOLTIP_WIDTH = 360;
+const TOOLTIP_GAP = 8;
 
 type Findings = NonNullable<PrMeta["findings"]>;
 
 export function FindingsCell({ findings }: { findings: PrMeta["findings"] }) {
   const t = useTranslations("prReview");
-  const [show, setShow] = React.useState(false);
+  const [anchor, setAnchor] = React.useState<{ top: number; left: number } | null>(null);
+  const cellRef = React.useRef<HTMLDivElement | null>(null);
+
+  const showTooltip = () => {
+    const el = cellRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - TOOLTIP_WIDTH - 8));
+    setAnchor({ top: r.bottom + TOOLTIP_GAP, left });
+  };
+  const hideTooltip = () => setAnchor(null);
 
   if (!findings) {
     return <span style={s.empty}>{t("list.findingsCell.empty")}</span>;
@@ -27,9 +40,10 @@ export function FindingsCell({ findings }: { findings: PrMeta["findings"] }) {
   }
   return (
     <div
+      ref={cellRef}
       style={s.cell}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
     >
       {SEVERITY_ORDER.filter((sv) => findings.counts[sv] > 0).map((sv) => {
         const meta = SEV[sv];
@@ -41,8 +55,8 @@ export function FindingsCell({ findings }: { findings: PrMeta["findings"] }) {
           </span>
         );
       })}
-      {show && findings.items.length > 0 && (
-        <FindingsTooltip items={findings.items} count={total} />
+      {anchor && findings.items.length > 0 && (
+        <FindingsTooltip items={findings.items} count={total} anchor={anchor} />
       )}
     </div>
   );
@@ -51,13 +65,19 @@ export function FindingsCell({ findings }: { findings: PrMeta["findings"] }) {
 function FindingsTooltip({
   items,
   count,
+  anchor,
 }: {
   items: Findings["items"];
   count: number;
+  anchor: { top: number; left: number };
 }) {
   const t = useTranslations("prReview");
-  return (
-    <div style={s.tooltip} onClick={(e) => e.stopPropagation()}>
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      style={{ ...s.tooltip, top: anchor.top, left: anchor.left }}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div style={s.tooltipHeader}>
         <Icon.AlertOctagon size={12} />
         {t("list.findingsCell.tooltipTitle", { count })}
@@ -83,6 +103,7 @@ function FindingsTooltip({
           </div>
         ))}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

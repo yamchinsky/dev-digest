@@ -25,11 +25,8 @@ export const s = {
     paddingBottom: 1,
   }),
   tooltip: {
-    position: "absolute" as const,
-    top: "100%",
-    left: 0,
-    marginTop: 8,
-    zIndex: 30,
+    position: "fixed" as const,
+    zIndex: 9999,
     width: 360,
     background: "var(--bg-elevated)",
     border: "1px solid var(--border-strong)",
@@ -38,6 +35,7 @@ export const s = {
     padding: 12,
     cursor: "default",
     textAlign: "left" as const,
+    pointerEvents: "none" as const,
   } satisfies CSSProperties,
   tooltipHeader: {
     display: "flex",
