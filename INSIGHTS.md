@@ -55,7 +55,17 @@ RunSummary), patch every literal, and run vitest on both before assuming
 tsc-green = tests-green.
 
 ## Session Notes
-_None yet._
+
+### L01 — FINDINGS column on PR list, demo PRs, agent vs Claude Code review
+_2026-06-19_ · `repo-wide`
+
+Shipped (`feat/pr1-hw` → PR #2): per-severity `FINDINGS` column on the PR list (server agg from latest `review`-kind review per PR, sparse items projection for the hover tooltip; client `FindingsCell` ported 1-to-1 from `screen_dashboard.jsx`). Two false starts before getting there — first put severity chips on PR **detail** (wrong target — the design defines `findings.jsx → FindingsPanel` but never *uses* it; the rendered design only has chips on the LIST), then ran a temporary `acme/payments-api` seed instead of the user's own repo. Both reverted.
+
+For the lab's "run reviewer + compare with Claude" item we needed real PRs with real diffs. The fork's parent (`burnjohn/dev-digest`) has 4 `demo/*` branches; 3 are clean ~30-line patches, the 4th (`demo/security-review-fixture`) carries a 900-file historical merge — useless to an agent, skipped. The 3 clean ones got cherry-picked onto user-main and opened as PRs #3/#4/#5 — *real* GitHub PRs the reviewer agent can fetch diffs for.
+
+Lab also expects each module's `INSIGHTS.md` populated. Fastest path: write entries during the session whenever something non-obvious lands, and wire the `engineering-insights` skill via a `.claude/settings.json` Stop hook (added) so the next session populates the missing INSIGHTS without manual nagging. Loop-safe via `stop_hook_active`.
+
+Demo PRs (`server/src/db/seed-demo-prs.ts`, idempotent, opt-in) cover both modes: PRs #101–#105 are pure DB rows with pre-seeded findings (visual only, can't be agent-reviewed — head_sha doesn't exist on GitHub); PRs #3–#5 are real and reviewable.
 
 ## Open Questions
 _None yet._
