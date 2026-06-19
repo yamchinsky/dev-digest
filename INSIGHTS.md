@@ -19,6 +19,11 @@ _None yet._
 
 ## Tool & Library Notes
 
+### `DevDigest Design (standalone).html` is a custom base64+gzip bundle — `file://` crashes the runtime
+_2026-06-19_ · `~/Desktop/dev-digest-mats/DevDigest Design (standalone).html` (`repo-wide` tooling)
+
+The standalone design artefact is a single 1.7 MB HTML that *looks* static but is a bundler: assets live in `<script type="__bundler/manifest">` (base64, gzip-`compressed: true`), the HTML template lives in `<script type="__bundler/template">` (JSON-encoded string), and the boot script swaps `document.documentElement` with the decoded template. Loading via `file://` makes blob URLs inherit a null origin → the bundler's own `fetch(s.src)` for inline-babel scripts silently drops, and Chrome DevTools loses its target on `replaceWith` (the page just disappears from `list_pages`). Serving from `127.0.0.1` works but exposing `Desktop/` is sandbox-blocked here. **Inspection workflow that works without rendering:** read line 178 → `JSON.parse` → grep for `type="text/babel"\s+src="<uuid>"` → for each UUID, look up the matching manifest entry, `base64.b64decode` then `gzip.decompress` if `compressed: true` → write to `/tmp/dd-design-src/NN_<uuid>.jsx`. The 28 babel scripts are the actual JSX; e.g. `screen_pr_detail.jsx`, `findings.jsx`, `prdetail_runs.jsx`. Faster than fighting the runtime.
+
 ### `pnpm typecheck` aborts on `ERR_PNPM_IGNORED_BUILDS` before tsc runs
 _2026-06-18_ · `repo-wide` (`server/`, `client/`)
 
