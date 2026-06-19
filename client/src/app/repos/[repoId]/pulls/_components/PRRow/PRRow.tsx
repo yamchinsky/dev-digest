@@ -10,6 +10,7 @@ import { RunCostBadge } from "@/components/RunCostBadge/RunCostBadge";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
+import { FindingsCell } from "../FindingsCell";
 
 export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const t = useTranslations("prReview");
@@ -53,6 +54,9 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
         ) : (
           <span style={s.muted}>—</span>
         )}
+      </div>
+      <div>
+        <FindingsCell findings={pr.findings} />
       </div>
       <div style={s.costCell}>
         <RunCostBadge cost={pr.cost_usd} variant="compact" />

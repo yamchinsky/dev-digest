@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -re 'if .stop_hook_active then empty else {decision:\"block\", reason:\"Before stopping, invoke the engineering-insights skill once. It appends a single dated entry to the correct INSIGHTS.md (root, server/, client/, reviewer-core/, or e2e/) for any non-obvious finding from this session — failure modes, library quirks, architectural decisions with non-obvious reasons, recurring errors and fixes, or unresolved open questions. Append-only; skip anything obvious from reading the code. Cover all four modules — if reviewer-core/ or e2e/ code was opened and something non-obvious noticed there, the entry goes into that module. If nothing non-obvious was uncovered, output a one-line note saying so and stop.\"} end'"
+          }
+        ]
+      }
+    ]
+  }
+}

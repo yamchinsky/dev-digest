@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
+import { Severity, FindingCategory } from './findings.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -175,6 +176,32 @@ export const PrMeta = z.object({
   // model is unknown to the price book. Never 0 for "no data" — only when an
   // actual zero-cost run (e.g. a free model) is the only signal.
   cost_usd: z.number().nullish(),
+  // Per-severity findings breakdown for the FINDINGS column. Computed from
+  // the latest 'review' review of each PR (matches `score` semantics). `null`
+  // until that PR has a review. `items` is a sparse projection (no
+  // suggestion / trifecta / kind) used by the list-row hover tooltip;
+  // rationale clamped to ~200 chars server-side.
+  findings: z
+    .object({
+      counts: z.object({
+        CRITICAL: z.number().int().nonnegative(),
+        WARNING: z.number().int().nonnegative(),
+        SUGGESTION: z.number().int().nonnegative(),
+      }),
+      items: z.array(
+        z.object({
+          severity: Severity,
+          category: FindingCategory,
+          title: z.string(),
+          file: z.string(),
+          start_line: z.number().int(),
+          end_line: z.number().int(),
+          confidence: z.number(),
+          rationale_excerpt: z.string(),
+        }),
+      ),
+    })
+    .nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 
