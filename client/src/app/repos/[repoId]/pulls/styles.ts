@@ -23,8 +23,9 @@ export const s = {
   rowIcon: (color: string): CSSProperties => ({ color, flexShrink: 0 }),
   rowTitleWrap: { minWidth: 0 } satisfies CSSProperties,
   rowTitle: (hover: boolean): CSSProperties => ({
-    fontSize: 14,
-    fontWeight: 550,
+    fontSize: 15,
+    fontWeight: 600,
+    lineHeight: 1.35,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -34,9 +35,12 @@ export const s = {
   authorCell: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
-    fontSize: 13,
-    color: "var(--text-secondary)",
+    justifyContent: "center",
+  } satisfies CSSProperties,
+  authorTrigger: {
+    display: "inline-flex",
+    alignItems: "center",
+    cursor: "help",
   } satisfies CSSProperties,
   sizeBadgeBorder: (color: string): CSSProperties => ({ border: `1px solid ${color}` }),
   scoreCell: { display: "flex", alignItems: "center" } satisfies CSSProperties,
