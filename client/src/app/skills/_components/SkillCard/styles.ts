@@ -41,7 +41,7 @@ export const s = {
     WebkitBoxOrient: "vertical" as const,
     overflow: "hidden",
   } satisfies CSSProperties,
-  metaRow: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  metaRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } satisfies CSSProperties,
   typeBadge: (color: string): CSSProperties => ({
     fontSize: 11,
     fontWeight: 600,
@@ -52,9 +52,25 @@ export const s = {
     textTransform: "uppercase",
     letterSpacing: "0.04em",
   }),
+  sourcePill: {
+    fontSize: 11,
+    color: "var(--text-muted)",
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    padding: "1px 7px",
+    borderRadius: 4,
+  } satisfies CSSProperties,
+  vetting: {
+    fontSize: 11,
+    color: "var(--sev-warning, #f59e0b)",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+  } satisfies CSSProperties,
   versionPill: {
     fontSize: 11,
     color: "var(--text-muted)",
     fontFamily: "var(--font-mono, ui-monospace, SFMono-Regular, monospace)",
+    marginLeft: "auto",
   } satisfies CSSProperties,
 } as const;

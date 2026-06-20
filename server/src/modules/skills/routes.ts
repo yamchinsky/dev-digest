@@ -99,6 +99,20 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     return { ok: true };
   });
 
+  app.get('/skills/:id/versions', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const versions = await service.listVersions(workspaceId, req.params.id);
+    if (!versions) throw new NotFoundError('Skill not found');
+    return versions;
+  });
+
+  app.get('/skills/:id/stats', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const stats = await service.stats(workspaceId, req.params.id);
+    if (!stats) throw new NotFoundError('Skill not found');
+    return stats;
+  });
+
   // Import: per-route bodyLimit override — base64 of a 1 MB zip is ~1.36 MB,
   // and the global cap is 1 MB. 2 MiB gives headroom for the JSON envelope.
   app.post(

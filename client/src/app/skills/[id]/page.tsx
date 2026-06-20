@@ -1,11 +1,11 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { SkillEditor } from "../_components/SkillEditor";
+import { SkillsLab } from "../_components/SkillsLab";
 
-/* /skills/[id] — Edit an existing skill. Body change creates a new immutable
-   version (server-side); other field changes don't bump version. */
-export default function SkillPage() {
+/* /skills/[id] — same Skills Lab shell, with one skill selected and loaded
+ *  in the right pane. Saved tab state lives in ?tab=. */
+export default function SkillDetailPage() {
   const params = useParams<{ id: string }>();
-  return <SkillEditor mode="edit" skillId={params.id} />;
+  return <SkillsLab skillId={params.id} />;
 }

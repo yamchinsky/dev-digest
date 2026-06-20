@@ -183,6 +183,19 @@ export const ImportCommitBody = z.object({
 });
 export type ImportCommitBody = z.infer<typeof ImportCommitBody>;
 
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+export const SkillStats = z.object({
+  linked_agents_count: z.number().int(),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
+
 // ---- Conventions ----
 export const ConventionCandidate = z.object({
   id: z.string(),

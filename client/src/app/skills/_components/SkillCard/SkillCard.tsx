@@ -62,6 +62,16 @@ export function SkillCard({
       <div style={s.description}>{skill.description}</div>
       <div style={s.metaRow}>
         <span style={s.typeBadge(color)}>{t(`listItem.type.${skill.type}`)}</span>
+        <span style={s.sourcePill}>{t(`listItem.source.${skill.source}`)}</span>
+        {/* "needs vetting" mirrors the design: any non-manual skill body is
+            third-party text that will land in an agent's prompt. The pill is
+            advisory — it doesn't gate enable; users acknowledge during import. */}
+        {skill.source !== "manual" && (
+          <span style={s.vetting} title={t("listItem.vettingTitle")}>
+            <Icon.AlertTriangle size={11} />
+            {t("listItem.needsVetting")}
+          </span>
+        )}
         <span style={s.versionPill}>v{skill.version}</span>
       </div>
     </div>

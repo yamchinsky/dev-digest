@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
@@ -135,6 +135,16 @@ export class SkillsRepository {
       .from(t.skillVersions)
       .where(eq(t.skillVersions.skillId, skillId))
       .orderBy(asc(t.skillVersions.version));
+  }
+
+  /** How many agents currently link this skill. Cheap COUNT on the join table.
+   *  Used by the Skill Stats tab. */
+  async linkedAgentsCount(skillId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(t.agentSkills)
+      .where(eq(t.agentSkills.skillId, skillId));
+    return row?.n ?? 0;
   }
 
   private async snapshotVersion(skillId: string, version: number, body: string): Promise<void> {

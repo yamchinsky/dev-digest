@@ -4,7 +4,9 @@ import type {
   ImportPreviewItem,
   Skill,
   SkillSource,
+  SkillStats,
   SkillType,
+  SkillVersion,
 } from '@devdigest/shared';
 import { SkillsRepository } from './repository.js';
 import { toSkillDto } from './helpers.js';
@@ -78,6 +80,28 @@ export class SkillsService {
 
   async delete(workspaceId: string, id: string): Promise<boolean> {
     return this.repo.deleteById(workspaceId, id);
+  }
+
+  /** Version history for a skill (oldest first). Returns undefined when the
+   *  skill isn't in this workspace — route maps to 404. */
+  async listVersions(workspaceId: string, id: string): Promise<SkillVersion[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, id);
+    if (!skill) return undefined;
+    const rows = await this.repo.listVersions(id);
+    return rows.map((r) => ({
+      skill_id: r.skillId,
+      version: r.version,
+      body: r.body,
+      created_at: r.createdAt.toISOString(),
+    }));
+  }
+
+  /** Aggregate stats for the Stats tab. Currently just linked-agents count. */
+  async stats(workspaceId: string, id: string): Promise<SkillStats | undefined> {
+    const skill = await this.repo.getById(workspaceId, id);
+    if (!skill) return undefined;
+    const count = await this.repo.linkedAgentsCount(id);
+    return { linked_agents_count: count };
   }
 
   /**

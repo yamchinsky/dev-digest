@@ -7,7 +7,9 @@ import type {
   ImportPreview,
   ImportPreviewItem,
   Skill,
+  SkillStats,
   SkillType,
+  SkillVersion,
   AgentSkillLink,
 } from "@devdigest/shared";
 
@@ -116,6 +118,24 @@ export function useImportCommit() {
     mutationFn: (items: ImportPreviewItem[]) =>
       api.post<Skill[]>("/skills/import/commit", { items }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["skills"] }),
+  });
+}
+
+/** Read-only history of body snapshots (Versions tab). */
+export function useSkillVersions(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-versions", id],
+    queryFn: () => api.get<SkillVersion[]>(`/skills/${id}/versions`),
+    enabled: !!id,
+  });
+}
+
+/** Aggregate stats for the Stats tab — currently just linked-agents count. */
+export function useSkillStats(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-stats", id],
+    queryFn: () => api.get<SkillStats>(`/skills/${id}/stats`),
+    enabled: !!id,
   });
 }
 

@@ -193,6 +193,25 @@ export const ImportCommitBody = z.object({
 });
 export type ImportCommitBody = z.infer<typeof ImportCommitBody>;
 
+// Immutable body snapshot — one row in `skill_versions` per body change.
+// The current `body` lives on the skill row; this surface is for the
+// Versions tab in the skill editor (history viewer, no rollback yet).
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+// Read-side aggregates for the Stats tab. Light by design — anything heavier
+// (runs-where-used, hit rate per finding category) belongs in agent_runs
+// queries that we don't expose here yet.
+export const SkillStats = z.object({
+  linked_agents_count: z.number().int(),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
+
 // ---- Conventions ----
 export const ConventionCandidate = z.object({
   id: z.string(),
