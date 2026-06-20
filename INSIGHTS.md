@@ -9,7 +9,11 @@ findings live in `<module>/INSIGHTS.md`.
 Keep under ~200 entries; split per sub-domain if it grows past that.
 
 ## What Works
-_None yet._
+
+### Split folder-structure rules into `frontend-architecture` instead of extending react-best-practices
+_2026-06-20_ · `.claude/skills/frontend-architecture/`, `.claude/skills/react-best-practices/SKILL.md:167-175`
+
+The existing `react-best-practices` SKILL.md ends with a 6-line Code Organization section (lines 167-175) — tempting to extend, but doing so hurts triggering: queries like "where do constants go" or "utils vs helpers" should load architecture rules, not React anti-patterns. We split into a third skill `frontend-architecture` (v0.1.0) that covers both Vite React and Next.js App Router folder structure; non-overlap with `react-best-practices` (patterns) and `next-best-practices` (RSC/runtime) is documented in `frontend-architecture/README.md` under "Relationship to other skills". Before extending Code Organization in `react-best-practices`, check whether the addition is about *where files live* (belongs in `frontend-architecture`) or about *how components are written* (stays in `react-best-practices`).
 
 ## What Doesn't Work
 _None yet._
@@ -42,10 +46,22 @@ _2026-06-20_ · `.claude/settings.json` (`repo-wide` tooling)
 
 The `engineering-insights` Stop hook first shipped as `jq -re 'if .stop_hook_active then empty else {decision:"block", reason:…} end'`. The `else` branch is fine, but the loop guard is fragile: `jq -e` on `empty` exits with **code 4**, which Claude Code's hook contract does not define (only 0 / 2 / "other → non-blocking") — the stop is allowed only as a side effect of a non-zero exit, not a documented path. The canonical form is non-blocking feedback: `jq -cn '{hookSpecificOutput:{hookEventName:"Stop", additionalContext:"…"}}'` — always exit 0, injects the reminder into the next model request without blocking the stop. Because nothing is blocked, the `stop_hook_active` guard is no longer needed (no loop risk). Use `additionalContext` for *reminders*; reserve `decision:"block"` (with a clean exit 0) only when you must hard-stop the turn until an action is taken.
 
+> Updated 2026-06-20: the `hookSpecificOutput` form above is **rejected by Claude Code's validator for Stop events** — the JSON schema only allows `hookSpecificOutput` for `PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `PostToolBatch`. Symptom: every Stop fires `Hook JSON output validation failed — (root): Invalid input` and the reminder is silently dropped. There is no non-blocking way to inject text into the next model request from a Stop hook. Working shape: read stdin, exit 0 when `"stop_hook_active": true`, otherwise emit `{"decision":"block","reason":"…"}` — this *does* block one stop and re-prompts the model with `reason`; the `stop_hook_active` guard makes it loop-safe. Soft alternatives: `{"systemMessage":"…"}` shows the text to the user (not the model), or move the reminder to a `UserPromptSubmit` hook where `additionalContext` is valid (fires *before* the next turn, not at end of current).
+
 ### Hook logic belongs in a script file, not an inline `jq` expression in `settings.json`
 _2026-06-20_ · `.claude/hooks/remind-insights.sh`, `.claude/settings.json`
 
 Beyond the exit-code bug above, the deeper smell was *form*: the whole hook lived as an inline `jq` program inside the JSON config — escaped quotes, single line, uncommentable, and `jq` became a hidden PATH dependency. Canonical Claude Code shape is a separate executable that reads the event on stdin and prints decision JSON on stdout. We moved it to `.claude/hooks/remind-insights.sh` (POSIX `sh`, quoted heredoc, `chmod +x`) and point `command` at `"$CLAUDE_PROJECT_DIR"/.claude/hooks/remind-insights.sh` (that env var is how a hook gets a cwd-independent path). Chose `sh` over a node script even though the repo is TS/Node: the payload is static, so spinning a node process per stop is needless overhead — reach for node only once the hook needs real logic (filter by cwd / touched modules). No `jq` needed for a constant payload — a quoted heredoc emits it and exits 0.
+
+### `git mv A B` after editing A leaves the edits unstaged under B
+_2026-06-20_ · `repo-wide` (git tooling)
+
+`git mv` does not re-read the working tree — it just renames the index entry, carrying HEAD's blob hash to the new path. If you edited A before the move, the index now has stale content at B, and `git status` shows B as both staged-new and unstaged-modified. Always `git add B` after a `git mv` that follows an edit (or do the edit *after* the move). Hit during the AGENTS.md ↔ CLAUDE.md migration: text replacements inside the files silently fell out of the staged rename until re-added.
+
+### Claude Code caches `.claude/settings.json` at session start — mid-session edits don't apply
+_2026-06-20_ · `.claude/settings.json` (`repo-wide` tooling)
+
+Claude Code reads `.claude/settings.json` (project) and `~/.claude/settings.json` (user) once at session boot and caches them for the lifetime of the session. Edits to hook commands, permissions, env vars, or model don't propagate to the running session — and `/clear` doesn't reload settings, it only resets conversation context. Symptom: a hook fires with text/behavior that doesn't match what's on disk (e.g. a phantom "Failed with non-blocking status code" from a buggy command you already replaced). Diagnose by comparing the hook payload in the system-reminder to `cat .claude/settings.json`; if they differ, you're on cached config. Fix is a full exit + relaunch of Claude Code.
 
 ## Recurring Errors & Fixes
 
@@ -57,7 +73,7 @@ _2026-06-20_ · `repo-wide` (git/gh tooling)
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages
 _2026-06-18_ · `server/src/vendor/shared/contracts/trace.ts` ↔ `client/src/vendor/shared/contracts/trace.ts` (paired vendored copies)
 
-The dual-vendoring rule is in root `CLAUDE.md`, but the actual bite is
+The dual-vendoring rule is in root `AGENTS.md`, but the actual bite is
 *test* fixtures: every `RunStats` / `RunSummary` / `PrMeta` literal in
 tests is hand-written. When I made `RunStats.cost_usd` required
 (`z.number().nullable()`) tsc broke `server/test/contracts.test.ts:160`
@@ -80,7 +96,7 @@ For the lab's "run reviewer + compare with Claude" item we needed real PRs with 
 
 Lab also expects each module's `INSIGHTS.md` populated. Fastest path: write entries during the session whenever something non-obvious lands, and wire the `engineering-insights` skill via a `.claude/settings.json` Stop hook (added) so the next session populates the missing INSIGHTS without manual nagging. Loop-safe via `stop_hook_active`.
 
-> Updated 2026-06-20: the hook was reworked to non-blocking `hookSpecificOutput.additionalContext` (exit 0), so `stop_hook_active` is no longer used — there is no loop to guard against anymore. See the entry in **Tool & Library Notes** above.
+> Updated 2026-06-20: the non-blocking `hookSpecificOutput.additionalContext` rework was itself wrong — Claude Code's Stop schema rejects `hookSpecificOutput`. Hook is back to `decision:"block"` + `reason` with the `stop_hook_active` guard. See the corrected entry in **Tool & Library Notes** above.
 
 Demo PRs (`server/src/db/seed-demo-prs.ts`, idempotent, opt-in) cover both modes: PRs #101–#105 are pure DB rows with pre-seeded findings (visual only, can't be agent-reviewed — head_sha doesn't exist on GitHub); PRs #3–#5 are real and reviewable.
 

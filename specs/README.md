@@ -11,5 +11,5 @@ Module-owned specs live under `<module>/specs/`. Code-defined contracts (e.g.
 `@devdigest/shared`) stay in code; this folder holds the human-readable
 mirror, design rationale, and fixtures that aren't checked-in TS.
 
-Link new files from `CLAUDE.md` via the `Read … when …` block so they
+Link new files from `AGENTS.md` via the `Read … when …` block so they
 actually get read.

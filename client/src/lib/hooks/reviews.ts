@@ -4,8 +4,8 @@
 
 import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, API_BASE } from "../api";
-import { notify } from "../toast";
+import { api, API_BASE } from "@/services/api";
+import { notify } from "@/providers/toast";
 import type {
   FindingActionKind,
   PrReviewComment,

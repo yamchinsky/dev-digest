@@ -38,6 +38,24 @@ prices, 6h TTL) propagates to all historical runs without rewriting any
 jsonb. If you add a third surface that shows cost, plug PriceBook in there
 too — do not denormalize a frozen value into the row.
 
+### Declare new port interfaces in `@devdigest/shared`, not `adapters/<port>/types.ts`
+_2026-06-20_ · `server/src/vendor/shared/adapters.ts`, `server/src/platform/container.ts:1-8`, `reviewer-core/src/review/run.ts:3`
+
+Every `Container`-resolved port (`LLMProvider`, `Embedder`, `GitHubClient`,
+`GitClient`, `CodeIndex`, `AuthProvider`, `SecretsProvider`) is declared in
+`vendor/shared/adapters.ts` and imported as `import type … from
+'@devdigest/shared'` — including in `reviewer-core/src/review/run.ts`,
+which types `ReviewInput.llm: LLMProvider` against the same file. The
+intuitive home — colocating the interface next to its implementation in
+`server/src/adapters/<port>/types.ts` — breaks the engine, because
+`reviewer-core` can't reach into `server/src/` (only `@devdigest/shared`
+and `@devdigest/reviewer-core` are path-alias-rewritable across packages).
+`AGENTS.md` calls out Zod contracts and `OpenRouterProvider` living across
+the boundary but is silent on port-interface placement, so the natural
+move when adding a new outbound integration is the wrong one. Declare new
+port interfaces in shared from the start, even if `reviewer-core` doesn't
+consume them yet.
+
 ## Tool & Library Notes
 _None yet._
 

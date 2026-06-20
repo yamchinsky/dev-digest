@@ -6,14 +6,13 @@ import { RunStatus } from "../RunStatus";
 import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
 import { s } from "./styles";
-import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
+import type { ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 interface FindingsTabProps {
   prId: string | null;
   liveRunIds: string[];
   reviewRunning: boolean;
-  lethalTrifecta: FindingRecord[];
   runs: ReviewRecord[];
   prRuns: RunSummary[] | undefined;
   prCommits: PrCommit[];
@@ -30,7 +29,6 @@ export function FindingsTab({
   prId,
   liveRunIds,
   reviewRunning,
-  lethalTrifecta,
   runs,
   prRuns,
   prCommits,
@@ -41,6 +39,9 @@ export function FindingsTab({
   onDelete,
   onRunDone,
 }: FindingsTabProps) {
+  // Lethal trifecta banner: derive from runs (the only consumer of this list).
+  // Cheap enough to recompute on every render — no useMemo needed.
+  const lethalTrifecta = runs.flatMap((r) => r.findings).filter((f) => f.kind === "lethal_trifecta");
   const handleCancelAll = useCallback(() => {
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
   }, [liveRunIds, cancelMutation]);
@@ -49,19 +50,10 @@ export function FindingsTab({
     if (liveRunIds[0]) onOpenTrace(liveRunIds[0]);
   }, [liveRunIds, onOpenTrace]);
 
-  const handleOpenTrace = useCallback(
-    (id: string) => {
-      onOpenTrace(id);
-    },
-    [onOpenTrace],
-  );
-
-  const handleDelete = useCallback(
-    (id: string) => {
-      onDelete(id);
-    },
-    [onDelete],
-  );
+  // Note: handleOpenTrace and handleDelete used to be useCallback wrappers
+  // around onOpenTrace / onDelete. They're plain prop pass-throughs, and the
+  // children below aren't React.memo, so the wrapping only churned refs.
+  // Pass the props directly instead.
 
   // Timeline → Review-runs navigation: clicking an agent name in the timeline
   // opens + scrolls to that run's accordion below. The nonce re-triggers the
@@ -131,9 +123,9 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
-            onOpenTrace={handleOpenTrace}
+            onOpenTrace={onOpenTrace}
             onGoToReview={handleGoToReview}
-            onDelete={handleDelete}
+            onDelete={onDelete}
           />
         </div>
       )}

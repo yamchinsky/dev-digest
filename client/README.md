@@ -12,14 +12,14 @@ dashboard screens.)
   (`@devdigest/ui`) and shared Zod contracts under `src/vendor/shared`
   (`@devdigest/shared`).
 - **API base:** `NEXT_PUBLIC_API_BASE` (default `http://localhost:3001`), used by
-  `src/lib/api.ts`. Every data hook lives in `src/lib/hooks/*`.
+  `src/services/api.ts`. Every data hook lives in `src/lib/hooks/*`.
 - **Run:** `pnpm dev` (`:3000`). **Test:** `pnpm test` (vitest + jsdom, fetch
   mocked — no API needed). **Typecheck:** `pnpm typecheck`.
 
 ## UI route map
 
 Routes (`src/app/**/page.tsx`) and the API surface each leans on (via
-`src/lib/hooks/*` → `src/lib/api.ts`):
+`src/lib/hooks/*` → `src/services/api.ts`):
 
 ```mermaid
 flowchart TD
