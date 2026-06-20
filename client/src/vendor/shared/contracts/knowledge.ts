@@ -140,6 +140,49 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
+export const CreateSkillBody = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().min(1).max(2000),
+  type: SkillType,
+  body: z.string().min(1).max(65_536),
+  enabled: z.boolean().optional(),
+});
+export type CreateSkillBody = z.infer<typeof CreateSkillBody>;
+
+export const UpdateSkillBody = z.object({
+  name: z.string().min(1).max(120).optional(),
+  description: z.string().min(1).max(2000).optional(),
+  type: SkillType.optional(),
+  body: z.string().min(1).max(65_536).optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateSkillBody = z.infer<typeof UpdateSkillBody>;
+
+export const ImportPreviewItem = z.object({
+  filename: z.string().nullable(),
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+});
+export type ImportPreviewItem = z.infer<typeof ImportPreviewItem>;
+
+export const ImportPreview = z.object({
+  items: z.array(ImportPreviewItem),
+});
+export type ImportPreview = z.infer<typeof ImportPreview>;
+
+export const ImportSkillUpload = z.object({
+  filename: z.string().min(1),
+  content_base64: z.string().min(1),
+});
+export type ImportSkillUpload = z.infer<typeof ImportSkillUpload>;
+
+export const ImportCommitBody = z.object({
+  items: z.array(ImportPreviewItem).min(1),
+});
+export type ImportCommitBody = z.infer<typeof ImportCommitBody>;
+
 // ---- Conventions ----
 export const ConventionCandidate = z.object({
   id: z.string(),

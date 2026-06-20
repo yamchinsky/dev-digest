@@ -6,6 +6,7 @@ import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
+  TEST_QUALITY_REVIEWER_PROMPT,
 } from './seed-prompts.js';
 
 /** Default provider/model for the built-in reviewer agents. */
@@ -211,6 +212,17 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       version: 1,
       createdBy: userId,
     },
+    {
+      workspaceId,
+      name: 'Test Quality Reviewer',
+      description: 'Flags uncovered branches, missed edge cases, excessive mocking, and flake patterns in test changes.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: TEST_QUALITY_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
   ];
   for (const a of seedAgents) {
     const [existing] = await db
@@ -218,6 +230,126 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
+  }
+
+  // ---- A1 example skills + Test Quality Reviewer wiring -----------------
+  // Seed 3 rubrics relevant to the TQR demo; the 4th (flake-patterns) is
+  // imported via the UI in `docs/agent-prompts/skills/flake-patterns.md` so
+  // the import-flow can be walked end-to-end on camera.
+  const seedSkills: Array<typeof t.skills.$inferInsert> = [
+    {
+      workspaceId,
+      name: 'branch-coverage-rubric',
+      description:
+        'For each new conditional branch in the diff (if/switch/early-return/throw), check that a test covers both sides. Flag the uncovered branch with file:line.',
+      type: 'rubric',
+      source: 'manual',
+      body: `# Branch coverage
+
+For every conditional branch added or modified in the diff, verify that at
+least one test exercises EACH side:
+- \`if (x)\` / \`else\`
+- \`switch\` cases (including the default)
+- early returns and \`throw\` statements
+- optional chaining short-circuits (\`a?.b\`)
+- ternaries (\`a ? b : c\`)
+
+If a side has no covering test, flag the exact \`file:line\` of the unreached
+branch. Bug-fix branches without a regression test are CRITICAL — without a
+guard the fix rots on the next refactor.`,
+      enabled: true,
+      version: 1,
+    },
+    {
+      workspaceId,
+      name: 'corner-case-checklist',
+      description:
+        'For each new public function/handler, verify tests exercise common edge cases: empty/null/undefined, boundary numerics, unicode, large input.',
+      type: 'rubric',
+      source: 'manual',
+      body: `# Corner case checklist
+
+For every new public function, handler, hook, or route in the diff, ask:
+- Empty / null / undefined / zero / negative / NaN
+- Empty string vs whitespace-only string
+- Boundary numerics: 0, 1, -1, MAX_SAFE_INTEGER
+- Unicode / multibyte / RTL characters
+- Very large input (long arrays, big strings) where complexity matters
+- Concurrency: same input twice in flight, cancellation, retry
+- Time: midnight rollover, DST, leap year
+
+If a relevant edge case is unexercised, flag it specifically — not "more tests
+needed". Cite which input shape would expose the gap.`,
+      enabled: true,
+      version: 1,
+    },
+    {
+      workspaceId,
+      name: 'mocking-discipline',
+      description:
+        'Mock only I/O boundaries (network, fs, time, randomness, LLM). Flag mocks that replace business logic or pre-bake outputs so the assertion is tautological.',
+      type: 'convention',
+      source: 'manual',
+      body: `# Mocking discipline
+
+Mocks belong at I/O boundaries: network, filesystem, time, randomness, LLM,
+external APIs. Business logic — the thing the test claims to verify — must
+NOT be mocked.
+
+Flag the following:
+- A function-under-test mocked away (its real behaviour never runs).
+- A mock that pre-bakes the production code's output, making the assertion
+  tautological ("returns 'ok'" → "expect 'ok'").
+- A mock with no behaviour (\`vi.fn()\` returning undefined) used where the
+  production code's branching depends on the return — the test passes by
+  accident, not by design.
+- DB code tested against a mocked Drizzle / query builder instead of
+  testcontainers Postgres. Mock/prod divergence has burned this repo before.`,
+      enabled: true,
+      version: 1,
+    },
+  ];
+
+  // Upsert skills (idempotent by name+workspace) and remember their ids.
+  const skillIds: Record<string, string> = {};
+  for (const sk of seedSkills) {
+    const [existing] = await db
+      .select()
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, sk.name)));
+    if (existing) {
+      skillIds[sk.name] = existing.id;
+    } else {
+      const [row] = await db.insert(t.skills).values(sk).returning();
+      if (row) {
+        skillIds[sk.name] = row.id;
+        await db
+          .insert(t.skillVersions)
+          .values({ skillId: row.id, version: 1, body: sk.body as string })
+          .onConflictDoNothing();
+      }
+    }
+  }
+
+  // Link the three seeded skills to Test Quality Reviewer in a stable order
+  // (idempotent: skipped when any link already exists for this agent).
+  const [tqr] = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, 'Test Quality Reviewer')));
+  if (tqr) {
+    const existingLinks = await db
+      .select()
+      .from(t.agentSkills)
+      .where(eq(t.agentSkills.agentId, tqr.id));
+    if (existingLinks.length === 0) {
+      const linkOrder = ['branch-coverage-rubric', 'corner-case-checklist', 'mocking-discipline'];
+      const links = linkOrder
+        .map((name, i) => ({ name, id: skillIds[name], order: i }))
+        .filter((l): l is { name: string; id: string; order: number } => !!l.id)
+        .map((l) => ({ agentId: tqr.id, skillId: l.id, order: l.order }));
+      if (links.length > 0) await db.insert(t.agentSkills).values(links);
+    }
   }
 
   return { workspaceId, userId };

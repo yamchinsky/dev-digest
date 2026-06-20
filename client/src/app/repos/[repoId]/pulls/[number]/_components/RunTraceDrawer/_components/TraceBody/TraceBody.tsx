@@ -8,7 +8,7 @@ import { Badge } from "@devdigest/ui";
 import type { RunTrace, FindingRecord } from "@devdigest/shared";
 import { PROMPT_COLORS } from "../../constants";
 import { formatSeconds, formatTokens } from "../../helpers";
-import { formatCost } from "@/lib/format-cost";
+import { formatCost } from "@/utils/format-cost";
 import { s } from "../../styles";
 import { TraceSection } from "../TraceSection";
 import { ToolCallRow } from "../ToolCallRow";
@@ -32,6 +32,19 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
             <span className="mono" style={s.configProvider}>
               {trace.config.provider ?? "—"}
             </span>
+          </Row>
+          <Row label={t("trace.config.skillsLoaded")}>
+            <div style={s.specsWrap}>
+              {!trace.skills_loaded || trace.skills_loaded.length === 0 ? (
+                <span style={s.specsNone}>{t("trace.config.none")}</span>
+              ) : (
+                trace.skills_loaded.map((sk, i) => (
+                  <span key={i} className="mono" style={s.spec}>
+                    {sk}
+                  </span>
+                ))
+              )}
+            </div>
           </Row>
           <Row label={t("trace.config.memoryPulled")}>
             <span>{t("trace.config.items", { count: trace.memory_pulled.length })}</span>

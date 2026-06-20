@@ -140,6 +140,59 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
+// Manual create — `source` is implicitly 'manual'; `enabled` defaults to true.
+export const CreateSkillBody = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().min(1).max(2000),
+  type: SkillType,
+  body: z.string().min(1).max(65_536),
+  enabled: z.boolean().optional(),
+});
+export type CreateSkillBody = z.infer<typeof CreateSkillBody>;
+
+// Patch any subset; updating `body` bumps `version` and inserts a row into
+// `skill_versions` (immutable history). Other field changes do not bump.
+export const UpdateSkillBody = z.object({
+  name: z.string().min(1).max(120).optional(),
+  description: z.string().min(1).max(2000).optional(),
+  type: SkillType.optional(),
+  body: z.string().min(1).max(65_536).optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateSkillBody = z.infer<typeof UpdateSkillBody>;
+
+// One skill parsed from an imported `.md` or `.zip` (in-memory, not yet saved).
+// `filename` is the original entry name from the archive (or `null` for a single
+// .md upload); shown in the import preview so the user knows what came from where.
+export const ImportPreviewItem = z.object({
+  filename: z.string().nullable(),
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+});
+export type ImportPreviewItem = z.infer<typeof ImportPreviewItem>;
+
+export const ImportPreview = z.object({
+  items: z.array(ImportPreviewItem),
+});
+export type ImportPreview = z.infer<typeof ImportPreview>;
+
+// Server accepts the file as base64 in JSON (avoids wiring fastify-multipart for
+// one route). `mime` is informational only; we trust the filename extension.
+export const ImportSkillUpload = z.object({
+  filename: z.string().min(1),
+  content_base64: z.string().min(1),
+});
+export type ImportSkillUpload = z.infer<typeof ImportSkillUpload>;
+
+// Commit a previously-previewed set. The client may edit `name` / `description`
+// / `type` between preview and commit (e.g. fill in a missing description).
+export const ImportCommitBody = z.object({
+  items: z.array(ImportPreviewItem).min(1),
+});
+export type ImportCommitBody = z.infer<typeof ImportCommitBody>;
+
 // ---- Conventions ----
 export const ConventionCandidate = z.object({
   id: z.string(),
