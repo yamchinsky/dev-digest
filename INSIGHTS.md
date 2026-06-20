@@ -37,6 +37,16 @@ failure but aren't. Workaround used this session: `./node_modules/.bin/tsc
 (commit the resulting `package.json` change), or set
 `package-manager-strict=false` in `.npmrc`.
 
+### Stop hook reminder: use non-blocking `additionalContext`, not `decision:"block"` + `jq -e empty` guard
+_2026-06-20_ · `.claude/settings.json` (`repo-wide` tooling)
+
+The `engineering-insights` Stop hook first shipped as `jq -re 'if .stop_hook_active then empty else {decision:"block", reason:…} end'`. The `else` branch is fine, but the loop guard is fragile: `jq -e` on `empty` exits with **code 4**, which Claude Code's hook contract does not define (only 0 / 2 / "other → non-blocking") — the stop is allowed only as a side effect of a non-zero exit, not a documented path. The canonical form is non-blocking feedback: `jq -cn '{hookSpecificOutput:{hookEventName:"Stop", additionalContext:"…"}}'` — always exit 0, injects the reminder into the next model request without blocking the stop. Because nothing is blocked, the `stop_hook_active` guard is no longer needed (no loop risk). Use `additionalContext` for *reminders*; reserve `decision:"block"` (with a clean exit 0) only when you must hard-stop the turn until an action is taken.
+
+### Hook logic belongs in a script file, not an inline `jq` expression in `settings.json`
+_2026-06-20_ · `.claude/hooks/remind-insights.sh`, `.claude/settings.json`
+
+Beyond the exit-code bug above, the deeper smell was *form*: the whole hook lived as an inline `jq` program inside the JSON config — escaped quotes, single line, uncommentable, and `jq` became a hidden PATH dependency. Canonical Claude Code shape is a separate executable that reads the event on stdin and prints decision JSON on stdout. We moved it to `.claude/hooks/remind-insights.sh` (POSIX `sh`, quoted heredoc, `chmod +x`) and point `command` at `"$CLAUDE_PROJECT_DIR"/.claude/hooks/remind-insights.sh` (that env var is how a hook gets a cwd-independent path). Chose `sh` over a node script even though the repo is TS/Node: the payload is static, so spinning a node process per stop is needless overhead — reach for node only once the hook needs real logic (filter by cwd / touched modules). No `jq` needed for a constant payload — a quoted heredoc emits it and exits 0.
+
 ## Recurring Errors & Fixes
 
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages
@@ -64,6 +74,8 @@ Shipped (`feat/pr1-hw` → PR #2): per-severity `FINDINGS` column on the PR list
 For the lab's "run reviewer + compare with Claude" item we needed real PRs with real diffs. The fork's parent (`burnjohn/dev-digest`) has 4 `demo/*` branches; 3 are clean ~30-line patches, the 4th (`demo/security-review-fixture`) carries a 900-file historical merge — useless to an agent, skipped. The 3 clean ones got cherry-picked onto user-main and opened as PRs #3/#4/#5 — *real* GitHub PRs the reviewer agent can fetch diffs for.
 
 Lab also expects each module's `INSIGHTS.md` populated. Fastest path: write entries during the session whenever something non-obvious lands, and wire the `engineering-insights` skill via a `.claude/settings.json` Stop hook (added) so the next session populates the missing INSIGHTS without manual nagging. Loop-safe via `stop_hook_active`.
+
+> Updated 2026-06-20: the hook was reworked to non-blocking `hookSpecificOutput.additionalContext` (exit 0), so `stop_hook_active` is no longer used — there is no loop to guard against anymore. See the entry in **Tool & Library Notes** above.
 
 Demo PRs (`server/src/db/seed-demo-prs.ts`, idempotent, opt-in) cover both modes: PRs #101–#105 are pure DB rows with pre-seeded findings (visual only, can't be agent-reviewed — head_sha doesn't exist on GitHub); PRs #3–#5 are real and reviewable.
 
