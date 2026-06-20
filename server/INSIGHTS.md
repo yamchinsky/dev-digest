@@ -9,7 +9,20 @@ bug or making a "looks obvious" decision in `server/`.
 _None yet._
 
 ## What Doesn't Work
-_None yet._
+
+### A non-OpenRouter model silently shows "—" cost unless its id is in pricing.ts
+_2026-06-20_ · `server/src/platform/price-book.ts:34-39`, `server/src/adapters/llm/pricing.ts`, `server/src/db/seed.ts:11-13`
+
+UI cost works out of the box only because the seeded default model is an
+OpenRouter slug (`deepseek/deepseek-v4-flash`): `PriceBook` ingests live
+prices for *all* OpenRouter models from `/models`, and the static fallback
+table also has that slug. Switch an agent to an Anthropic/OpenAI model id
+(via `PUT /agents/:id`) and OpenRouter's `/models` returns no price for it, so
+`PriceBook` falls through to the static table — if that exact id is absent,
+`estimate()` returns `null` and the row renders `—`, no error. Adding a
+non-OpenRouter model means adding its id to `pricing.ts`, and the key must
+match the string persisted in `agent_runs.model` exactly (whatever the
+provider passes to `estimateCost`), or the fallback still misses.
 
 ## Codebase Patterns
 
