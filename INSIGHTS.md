@@ -49,6 +49,11 @@ Beyond the exit-code bug above, the deeper smell was *form*: the whole hook live
 
 ## Recurring Errors & Fixes
 
+### `gh pr create` from this fork defaults to upstream (`burnjohn`), not `origin` (`yamchinsky`)
+_2026-06-20_ · `repo-wide` (git/gh tooling)
+
+`origin` is the fork `yamchinsky/dev-digest`; `upstream` is `burnjohn/dev-digest`. A bare `gh pr create --base main --head <branch>` resolves the base repo to **upstream** (gh's fork heuristic), so it fails with the misleading `GraphQL: Head sha can't be blank … No commits between main and <branch>` even though `git log origin/main..<branch>` clearly shows commits — the branch simply doesn't exist on upstream. Fix: pass the base repo explicitly and qualify the head with the owner: `gh pr create --repo yamchinsky/dev-digest --base main --head yamchinsky:<branch>`. (Or run `gh repo set-default yamchinsky/dev-digest` once.) Don't trust the "no commits between" message — check which repo gh is targeting first.
+
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages
 _2026-06-18_ · `server/src/vendor/shared/contracts/trace.ts` ↔ `client/src/vendor/shared/contracts/trace.ts` (paired vendored copies)
 
