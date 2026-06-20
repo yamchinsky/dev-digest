@@ -96,6 +96,7 @@
       "status": "Status",
       "updated": "Updated"
     },
+    "authorTooltip": "Author: {author}",
     "findingsCell": {
       "empty": "—",
       "tooltipTitle": "{count, plural, one {# finding} other {# findings}}"

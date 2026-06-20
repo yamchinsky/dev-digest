@@ -36,8 +36,13 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
         </div>
       </div>
       <div style={s.authorCell}>
-        <Avatar name={pr.author} size={18} />
-        {pr.author}
+        <span
+          style={s.authorTrigger}
+          title={pr.author}
+          aria-label={t("list.authorTooltip", { author: pr.author })}
+        >
+          <Avatar name={pr.author} size={22} />
+        </span>
       </div>
       <div>
         <Badge
