@@ -7,7 +7,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Icon, SEV, SeverityBadge, CategoryTag } from "@devdigest/ui";
-import type { PrMeta } from "@/lib/types";
+import type { PrMeta } from "@/types";
 import { s } from "./styles";
 
 const SEVERITY_ORDER = ["CRITICAL", "WARNING", "SUGGESTION"] as const;

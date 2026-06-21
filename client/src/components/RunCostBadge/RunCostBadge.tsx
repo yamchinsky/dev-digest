@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { formatCost } from "@/lib/format-cost";
+import { formatCost } from "@/utils/format-cost";
 
 /**
  * RunCostBadge — surfaces the cost of one agent run (or an aggregate). Two

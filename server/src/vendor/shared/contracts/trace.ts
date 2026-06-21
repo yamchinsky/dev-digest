@@ -87,6 +87,10 @@ export const RunTrace = z.object({
   raw_output: z.string(),
   memory_pulled: z.array(MemoryPulled),
   specs_read: z.array(z.string()),
+  /** Names of skills bound to the agent that fed into this run's prompt.
+   *  Surfaced as chips in the trace drawer's Configuration section so a viewer
+   *  can see *which* rules were active without expanding the prompt body. */
+  skills_loaded: z.array(z.string()).optional(),
   log: z.array(RunLogLine),
 });
 export type RunTrace = z.infer<typeof RunTrace>;

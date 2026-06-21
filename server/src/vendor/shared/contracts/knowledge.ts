@@ -128,6 +128,10 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  /** Denormalized for the Skills Lab list — how many agents link this skill.
+   *  Cheap COUNT on agent_skills, populated by the list/get endpoints; absent
+   *  on writes (create/update return paths) and in tests that build literals. */
+  linked_agents_count: z.number().int().nullish(),
 });
 export type Skill = z.infer<typeof Skill>;
 
@@ -139,6 +143,87 @@ export const CommunitySkill = z.object({
   desc: z.string(),
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
+
+// Manual create — `source` is implicitly 'manual'; `enabled` defaults to true.
+export const CreateSkillBody = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().min(1).max(2000),
+  type: SkillType,
+  body: z.string().min(1).max(65_536),
+  enabled: z.boolean().optional(),
+});
+export type CreateSkillBody = z.infer<typeof CreateSkillBody>;
+
+// Patch any subset; updating `body` bumps `version` and inserts a row into
+// `skill_versions` (immutable history). Other field changes do not bump.
+export const UpdateSkillBody = z.object({
+  name: z.string().min(1).max(120).optional(),
+  description: z.string().min(1).max(2000).optional(),
+  type: SkillType.optional(),
+  body: z.string().min(1).max(65_536).optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateSkillBody = z.infer<typeof UpdateSkillBody>;
+
+// One skill parsed from an imported `.md` or `.zip` (in-memory, not yet saved).
+// `filename` is the original entry name from the archive (or `null` for a single
+// .md upload); shown in the import preview so the user knows what came from where.
+export const ImportPreviewItem = z.object({
+  filename: z.string().nullable(),
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+});
+export type ImportPreviewItem = z.infer<typeof ImportPreviewItem>;
+
+export const ImportPreview = z.object({
+  items: z.array(ImportPreviewItem),
+});
+export type ImportPreview = z.infer<typeof ImportPreview>;
+
+// Server accepts the file as base64 in JSON (avoids wiring fastify-multipart for
+// one route). `mime` is informational only; we trust the filename extension.
+export const ImportSkillUpload = z.object({
+  filename: z.string().min(1),
+  content_base64: z.string().min(1),
+});
+export type ImportSkillUpload = z.infer<typeof ImportSkillUpload>;
+
+// Commit a previously-previewed set. The client may edit `name` / `description`
+// / `type` between preview and commit (e.g. fill in a missing description).
+export const ImportCommitBody = z.object({
+  items: z.array(ImportPreviewItem).min(1),
+});
+export type ImportCommitBody = z.infer<typeof ImportCommitBody>;
+
+// Immutable body snapshot — one row in `skill_versions` per body change.
+// The current `body` lives on the skill row; this surface is for the
+// Versions tab in the skill editor (history viewer, no rollback yet).
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+// Read-side aggregates for the Stats tab. Light by design — anything heavier
+// (runs-where-used, hit rate per finding category) belongs in agent_runs
+// queries we don't expose yet. `linked_agents` is what powers the "Agents
+// using this skill" list with Open-in-Editor buttons.
+export const SkillStatsAgent = z.object({
+  id: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+});
+export type SkillStatsAgent = z.infer<typeof SkillStatsAgent>;
+
+export const SkillStats = z.object({
+  linked_agents_count: z.number().int(),
+  linked_agents: z.array(SkillStatsAgent),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
 
 // ---- Conventions ----
 export const ConventionCandidate = z.object({

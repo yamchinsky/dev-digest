@@ -152,6 +152,18 @@ export class ReviewRunExecutor {
 
     runLog.info(`Starting review with agent "${agent.name}" (${agent.provider}/${agent.model})`);
 
+    // Pull this agent's linked skills (ordered, enabled-only) BEFORE the try —
+    // also surfaced in the failure trace so a user can see what *would* have
+    // been attached even when the run dies during LLM resolution. Disabled
+    // skills stay attached but skip the run (useful for A/B'ing a rule).
+    const linkedSkills = await this.agents.linkedSkills(agent.id).catch(() => []);
+    const activeSkills = linkedSkills.filter((l) => l.skill.enabled);
+    const skillBodies = activeSkills.map((l) => l.skill.body);
+    const skillNames = activeSkills.map((l) => l.skill.name);
+    if (skillNames.length > 0) {
+      runLog.info(`Skills attached: ${skillNames.join(', ')}`);
+    }
+
     try {
       // Resolve the agent's LLM provider. (container.llm throws if the provider
       // key is missing — caught below and persisted as a failed run.)
@@ -195,6 +207,9 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // A1 — bound skills as ordered rule blocks. assemblePrompt omits the
+        // `## Skills / rules` section when this is empty/undefined.
+        ...(skillBodies.length > 0 ? { skills: skillBodies } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -281,6 +296,7 @@ export class ReviewRunExecutor {
         raw_output: outcome.raw,
         memory_pulled: [],
         specs_read: [],
+        skills_loaded: skillNames,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -309,7 +325,10 @@ export class ReviewRunExecutor {
         })
         .catch(() => undefined);
       await this.repo
-        .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start))
+        .saveRunTrace(
+          runId,
+          this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start, skillBodies, skillNames),
+        )
         .catch(() => undefined);
       this.container.runBus.complete(runId);
       throw err;
@@ -414,6 +433,8 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     grounding: string,
     durationMs = 0,
+    skillBodies: string[] = [],
+    skillNames: string[] = [],
   ): RunTrace {
     return {
       config: {
@@ -425,11 +446,18 @@ export class ReviewRunExecutor {
         source: 'local',
       },
       stats: { duration_ms: durationMs, tokens_in: 0, tokens_out: 0, findings: 0, grounding, cost_usd: null },
-      prompt_assembly: { system: agent.systemPrompt, skills: null, memory: null, specs: null, user: '' },
+      prompt_assembly: {
+        system: agent.systemPrompt,
+        skills: skillBodies.length > 0 ? skillBodies.join('\n\n') : null,
+        memory: null,
+        specs: null,
+        user: '',
+      },
       tool_calls: [],
       raw_output: '',
       memory_pulled: [],
       specs_read: [],
+      skills_loaded: skillNames,
       log: this.container.runBus.buffer(runId).map((e) => ({ t: e.t, kind: e.kind, msg: e.msg })),
     };
   }

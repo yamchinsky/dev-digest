@@ -128,6 +128,8 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  /** Denormalized for the Skills Lab list — how many agents link this skill. */
+  linked_agents_count: z.number().int().nullish(),
 });
 export type Skill = z.infer<typeof Skill>;
 
@@ -139,6 +141,70 @@ export const CommunitySkill = z.object({
   desc: z.string(),
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
+
+export const CreateSkillBody = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().min(1).max(2000),
+  type: SkillType,
+  body: z.string().min(1).max(65_536),
+  enabled: z.boolean().optional(),
+});
+export type CreateSkillBody = z.infer<typeof CreateSkillBody>;
+
+export const UpdateSkillBody = z.object({
+  name: z.string().min(1).max(120).optional(),
+  description: z.string().min(1).max(2000).optional(),
+  type: SkillType.optional(),
+  body: z.string().min(1).max(65_536).optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateSkillBody = z.infer<typeof UpdateSkillBody>;
+
+export const ImportPreviewItem = z.object({
+  filename: z.string().nullable(),
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+});
+export type ImportPreviewItem = z.infer<typeof ImportPreviewItem>;
+
+export const ImportPreview = z.object({
+  items: z.array(ImportPreviewItem),
+});
+export type ImportPreview = z.infer<typeof ImportPreview>;
+
+export const ImportSkillUpload = z.object({
+  filename: z.string().min(1),
+  content_base64: z.string().min(1),
+});
+export type ImportSkillUpload = z.infer<typeof ImportSkillUpload>;
+
+export const ImportCommitBody = z.object({
+  items: z.array(ImportPreviewItem).min(1),
+});
+export type ImportCommitBody = z.infer<typeof ImportCommitBody>;
+
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+export const SkillStatsAgent = z.object({
+  id: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+});
+export type SkillStatsAgent = z.infer<typeof SkillStatsAgent>;
+
+export const SkillStats = z.object({
+  linked_agents_count: z.number().int(),
+  linked_agents: z.array(SkillStatsAgent),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
 
 // ---- Conventions ----
 export const ConventionCandidate = z.object({

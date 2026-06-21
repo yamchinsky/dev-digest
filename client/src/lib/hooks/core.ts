@@ -5,7 +5,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
+import { api } from "@/services/api";
 import type {
   Settings,
   SettingsUpdate,
@@ -17,7 +17,7 @@ import type {
   PrDetail,
   SpecFile,
   IndexStatus,
-} from "../types";
+} from "@/types";
 
 // ---- Settings (F1: GET/PUT /settings, POST /settings/test-connection) ----
 export function useSettings() {

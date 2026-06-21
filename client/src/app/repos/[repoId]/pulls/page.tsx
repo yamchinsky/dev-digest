@@ -14,8 +14,8 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { RepoNotFound } from "@/components/repo-not-found";
 import { usePulls, useRefreshRepo } from "@/lib/hooks";
-import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
-import { ApiError } from "@/lib/api";
+import { useActiveRepo, useRepoNotFound } from "@/providers/repo-context";
+import { ApiError } from "@/services/api";
 import { COLUMN_KEYS, SKELETON_ROWS } from "./constants";
 import { s } from "./styles";
 import { PRRow } from "./_components/PRRow";
@@ -47,15 +47,21 @@ export default function PullsPage() {
   const [sort, setSort] = React.useState("newest");
 
   const q = query.trim().toLowerCase();
-  const filtered = (pulls ?? [])
-    .filter((p) => status === "all" || p.status === status)
-    .filter((p) => !q || p.title.toLowerCase().includes(q) || String(p.number).includes(q))
-    .slice()
-    .sort((a, b) => {
-      const ta = Date.parse(a.updated_at ?? "") || 0;
-      const tb = Date.parse(b.updated_at ?? "") || 0;
-      return sort === "oldest" ? ta - tb : tb - ta;
-    });
+  // Justified: this filter+filter+sort runs on every render, the page has a
+  // 60s refetchInterval, and pulls is a list of up to a few hundred items.
+  const filtered = React.useMemo(
+    () =>
+      (pulls ?? [])
+        .filter((p) => status === "all" || p.status === status)
+        .filter((p) => !q || p.title.toLowerCase().includes(q) || String(p.number).includes(q))
+        .slice()
+        .sort((a, b) => {
+          const ta = Date.parse(a.updated_at ?? "") || 0;
+          const tb = Date.parse(b.updated_at ?? "") || 0;
+          return sort === "oldest" ? ta - tb : tb - ta;
+        }),
+    [pulls, status, q, sort],
+  );
   const repoName = activeRepo?.full_name ?? repoId;
   const openCount = (pulls ?? []).filter((p) => OPEN_STATUSES.has(p.status)).length;
   const needsReviewCount = (pulls ?? []).filter((p) => p.status === "needs_review").length;
