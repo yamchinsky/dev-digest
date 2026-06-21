@@ -128,6 +128,8 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  /** Denormalized for the Skills Lab list — how many agents link this skill. */
+  linked_agents_count: z.number().int().nullish(),
 });
 export type Skill = z.infer<typeof Skill>;
 

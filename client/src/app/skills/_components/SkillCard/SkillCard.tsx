@@ -72,6 +72,14 @@ export function SkillCard({
             {t("listItem.needsVetting")}
           </span>
         )}
+        {/* Usage chip — server denormalized this onto the Skill DTO so the
+            list doesn't fan out to N count queries. */}
+        {skill.linked_agents_count != null && (
+          <span style={s.usagePill}>
+            <Icon.Cpu size={11} />
+            {skill.linked_agents_count} {skill.linked_agents_count === 1 ? "agent" : "agents"}
+          </span>
+        )}
         <span style={s.versionPill}>v{skill.version}</span>
       </div>
     </div>

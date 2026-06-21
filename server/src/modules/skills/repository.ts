@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
@@ -145,6 +145,25 @@ export class SkillsRepository {
       .from(t.agentSkills)
       .where(eq(t.agentSkills.skillId, skillId));
     return row?.n ?? 0;
+  }
+
+  /** Bulk variant: returns a Map of skill_id → count for the given ids.
+   *  Used by the list endpoint to denormalize per-card stats in one query
+   *  instead of N queries. Missing ids resolve to 0 (no row in agent_skills). */
+  async linkedAgentsCountByIds(ids: string[]): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (ids.length === 0) return map;
+    const rows = await this.db
+      .select({
+        skillId: t.agentSkills.skillId,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(t.agentSkills)
+      .where(inArray(t.agentSkills.skillId, ids))
+      .groupBy(t.agentSkills.skillId);
+    for (const r of rows) map.set(r.skillId, r.n);
+    for (const id of ids) if (!map.has(id)) map.set(id, 0);
+    return map;
   }
 
   private async snapshotVersion(skillId: string, version: number, body: string): Promise<void> {

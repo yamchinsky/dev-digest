@@ -41,14 +41,16 @@ import { StatsTab } from "../SkillDetail/StatsTab";
 import { filterSkills, typeColor } from "../SkillsListView/helpers";
 import { s } from "./styles";
 
-const VALID_TABS = ["config", "preview", "versions", "stats"] as const;
+const VALID_TABS = ["config", "preview", "stats", "versions"] as const;
 type TabKey = (typeof VALID_TABS)[number];
 
+// Design order: Config | Preview | Stats | Versions (Evals tab from the
+// design is intentionally omitted — agreed to skip eval in this iteration).
 const TAB_DEFS = [
   { key: "config", label: "Config", icon: "Settings" as const },
   { key: "preview", label: "Preview", icon: "Eye" as const },
-  { key: "versions", label: "Versions", icon: "History" as const },
   { key: "stats", label: "Stats", icon: "BarChart" as const },
+  { key: "versions", label: "Versions", icon: "History" as const },
 ];
 
 export function SkillsLab({ skillId }: { skillId?: string }) {

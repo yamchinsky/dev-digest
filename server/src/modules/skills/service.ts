@@ -52,12 +52,17 @@ export class SkillsService {
 
   async list(workspaceId: string, filter: { type?: SkillType; enabled?: boolean; q?: string } = {}): Promise<Skill[]> {
     const rows = await this.repo.list(workspaceId, filter);
-    return rows.map(toSkillDto);
+    // Denormalize linked_agents_count in ONE COUNT (vs N) so the Skills Lab
+    // card grid can render usage without a per-card request.
+    const counts = await this.repo.linkedAgentsCountByIds(rows.map((r) => r.id));
+    return rows.map((r) => ({ ...toSkillDto(r), linked_agents_count: counts.get(r.id) ?? 0 }));
   }
 
   async get(workspaceId: string, id: string): Promise<Skill | undefined> {
     const row = await this.repo.getById(workspaceId, id);
-    return row ? toSkillDto(row) : undefined;
+    if (!row) return undefined;
+    const count = await this.repo.linkedAgentsCount(id);
+    return { ...toSkillDto(row), linked_agents_count: count };
   }
 
   async create(workspaceId: string, input: CreateSkillInput, source: SkillSource = 'manual'): Promise<Skill> {

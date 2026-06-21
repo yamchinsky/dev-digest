@@ -128,6 +128,10 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  /** Denormalized for the Skills Lab list — how many agents link this skill.
+   *  Cheap COUNT on agent_skills, populated by the list/get endpoints; absent
+   *  on writes (create/update return paths) and in tests that build literals. */
+  linked_agents_count: z.number().int().nullish(),
 });
 export type Skill = z.infer<typeof Skill>;
 

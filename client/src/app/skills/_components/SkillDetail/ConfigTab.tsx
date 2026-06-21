@@ -6,14 +6,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  TextInput,
-  SelectInput,
-  Textarea,
-  FormField,
-  Markdown,
-} from "@devdigest/ui";
+import { Button, TextInput, SelectInput, FormField, Markdown } from "@devdigest/ui";
 import type { Skill, SkillType } from "@devdigest/shared";
 import { useUpdateSkill } from "@/lib/hooks/skills";
 import { s } from "./styles";
@@ -92,11 +85,7 @@ export function ConfigTab({ skill, onDelete }: { skill: Skill; onDelete: () => v
         />
       </FormField>
 
-      <FormField
-        label="Skill body (Markdown)"
-        hint={t("preview.bodyHint")}
-        right={<span style={s.tokenCounter}>~{approxTokens(form.body)} tokens</span>}
-      >
+      <FormField label="Skill body (Markdown)" required hint={t("preview.bodyHint")}>
         <div style={s.bodyTabs}>
           <button style={s.bodyTab(bodyTab === "edit")} onClick={() => setBodyTab("edit")}>
             Edit
@@ -106,13 +95,14 @@ export function ConfigTab({ skill, onDelete }: { skill: Skill; onDelete: () => v
           </button>
         </div>
         {bodyTab === "edit" ? (
-          <Textarea
-            mono
-            rows={14}
-            value={form.body}
-            onChange={(v) => setForm({ ...form, body: v })}
-            placeholder={"# Rule\nDescribe the rule…"}
-          />
+          <>
+            <div style={s.bodyHeader}>
+              <span style={s.bodyFilename}>{skill.name}.md</span>
+              {dirty && <span style={s.bodyUnsaved}>unsaved</span>}
+              <span>~{approxTokens(form.body)} tokens</span>
+            </div>
+            <BodyEditor value={form.body} onChange={(v) => setForm({ ...form, body: v })} />
+          </>
         ) : (
           <div style={s.preview}>
             {form.body.trim().length > 0 ? (
@@ -128,11 +118,42 @@ export function ConfigTab({ skill, onDelete }: { skill: Skill; onDelete: () => v
         <Button kind="danger" size="sm" icon="Trash" onClick={onDelete}>
           Delete
         </Button>
-        <div style={{ flex: 1 }} />
+        <span style={s.saveHint}>
+          {dirty
+            ? `Saving snapshots the body as v${skill.version + 1}`
+            : `Currently at v${skill.version}`}
+        </span>
         <Button kind="primary" size="sm" disabled={!canSave || update.isPending} onClick={handleSave}>
-          {update.isPending ? "Saving…" : "Save"}
+          {update.isPending ? "Saving…" : "Save skill"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/* BodyEditor — textarea with a synthetic line-number gutter. We don't pull in
+   a real code-editor (CodeMirror / Monaco) for one panel; this gives the
+   gutter feel the design shows without a 200 KB dep. The gutter renders as
+   a sibling <pre> that scrolls together with the textarea via shared height. */
+function BodyEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const lineCount = Math.max(1, value.split("\n").length);
+  const gutter = React.useMemo(
+    () => Array.from({ length: lineCount }, (_, i) => i + 1).join("\n"),
+    [lineCount],
+  );
+  return (
+    <div style={s.editorRow}>
+      <pre style={s.gutter} aria-hidden="true">
+        {gutter}
+      </pre>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={Math.max(14, Math.min(lineCount + 1, 32))}
+        spellCheck={false}
+        style={s.editorTextarea}
+        placeholder={"# Rule\nDescribe the rule…"}
+      />
     </div>
   );
 }

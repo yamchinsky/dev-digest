@@ -67,6 +67,13 @@ export const s = {
     alignItems: "center",
     gap: 4,
   } satisfies CSSProperties,
+  usagePill: {
+    fontSize: 11,
+    color: "var(--text-muted)",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+  } satisfies CSSProperties,
   versionPill: {
     fontSize: 11,
     color: "var(--text-muted)",
