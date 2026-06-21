@@ -100,16 +100,16 @@ export const s = {
     padding: "16px 0",
     borderTop: "1px solid var(--border)",
   } satisfies CSSProperties,
-  versionRow: {
+  versionRow: (current: boolean): CSSProperties => ({
     display: "flex",
     alignItems: "flex-start",
     gap: 14,
     padding: "14px 16px",
-    border: "1px solid var(--border)",
+    border: `1px solid ${current ? "var(--accent)" : "var(--border)"}`,
     borderRadius: 8,
-    background: "var(--bg-surface)",
+    background: current ? "var(--accent-bg)" : "var(--bg-surface)",
     marginBottom: 10,
-  } satisfies CSSProperties,
+  }),
   versionNumber: {
     fontSize: 13,
     fontWeight: 700,
@@ -117,24 +117,94 @@ export const s = {
     color: "var(--accent)",
     minWidth: 36,
   } satisfies CSSProperties,
-  versionMeta: { flex: 1 } satisfies CSSProperties,
+  versionMeta: { flex: 1, minWidth: 0 } satisfies CSSProperties,
+  versionTopRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+    flexWrap: "wrap" as const,
+  } satisfies CSSProperties,
   versionDate: {
     fontSize: 12,
     color: "var(--text-muted)",
-    marginBottom: 8,
+  } satisfies CSSProperties,
+  currentBadge: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "var(--accent)",
+    background: "var(--accent-bg)",
+    border: "1px solid var(--accent)",
+    padding: "1px 8px",
+    borderRadius: 4,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.06em",
+  } satisfies CSSProperties,
+  diffStats: {
+    fontSize: 12,
+    fontFamily: "var(--font-mono)",
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  diffPlus: { color: "var(--sev-ok, #10b981)" } satisfies CSSProperties,
+  diffMinus: { color: "var(--sev-critical, #ef4444)" } satisfies CSSProperties,
+  versionActions: {
+    marginLeft: "auto",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
   } satisfies CSSProperties,
   versionBody: {
     fontSize: 12.5,
     fontFamily: "var(--font-mono)",
     color: "var(--text-secondary)",
     whiteSpace: "pre-wrap" as const,
-    maxHeight: 200,
+    maxHeight: 240,
     overflow: "auto",
     padding: 10,
     background: "var(--bg-elevated)",
     border: "1px solid var(--border)",
     borderRadius: 6,
   } satisfies CSSProperties,
+  diffBlock: {
+    fontSize: 12.5,
+    fontFamily: "var(--font-mono)",
+    lineHeight: 1.55,
+    maxHeight: 320,
+    overflow: "auto",
+    padding: 0,
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+  } satisfies CSSProperties,
+  diffLine: (kind: "eq" | "add" | "del"): CSSProperties => ({
+    display: "flex",
+    padding: "1px 10px",
+    background:
+      kind === "add"
+        ? "rgba(16, 185, 129, 0.08)"
+        : kind === "del"
+          ? "rgba(239, 68, 68, 0.08)"
+          : "transparent",
+    color:
+      kind === "add"
+        ? "var(--sev-ok, #10b981)"
+        : kind === "del"
+          ? "var(--sev-critical, #ef4444)"
+          : "var(--text-secondary)",
+  }),
+  diffPrefix: { width: 14, flexShrink: 0, userSelect: "none" as const } satisfies CSSProperties,
+  diffText: { whiteSpace: "pre-wrap" as const, flex: 1 } satisfies CSSProperties,
+  viewToggle: { display: "flex", gap: 4 } satisfies CSSProperties,
+  viewToggleBtn: (active: boolean): CSSProperties => ({
+    padding: "3px 9px",
+    fontSize: 11.5,
+    fontWeight: 600,
+    background: active ? "var(--bg-elevated)" : "transparent",
+    border: `1px solid ${active ? "var(--border-strong)" : "var(--border)"}`,
+    borderRadius: 5,
+    color: active ? "var(--text-primary)" : "var(--text-muted)",
+    cursor: "pointer",
+  }),
   statGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
