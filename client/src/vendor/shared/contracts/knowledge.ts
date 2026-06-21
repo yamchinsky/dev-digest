@@ -193,8 +193,16 @@ export const SkillVersion = z.object({
 });
 export type SkillVersion = z.infer<typeof SkillVersion>;
 
+export const SkillStatsAgent = z.object({
+  id: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+});
+export type SkillStatsAgent = z.infer<typeof SkillStatsAgent>;
+
 export const SkillStats = z.object({
   linked_agents_count: z.number().int(),
+  linked_agents: z.array(SkillStatsAgent),
 });
 export type SkillStats = z.infer<typeof SkillStats>;
 

@@ -101,12 +101,16 @@ export class SkillsService {
     }));
   }
 
-  /** Aggregate stats for the Stats tab. Currently just linked-agents count. */
+  /** Aggregate stats for the Stats tab. Currently:
+   *   - linked_agents_count: cheap COUNT on agent_skills
+   *   - linked_agents: id+name+enabled for the "Agents using this skill" list
+   *  Pull%, accept%, findings-30d would need per-finding skill attribution
+   *  that the data model doesn't yet carry; the client renders those as stubs. */
   async stats(workspaceId: string, id: string): Promise<SkillStats | undefined> {
     const skill = await this.repo.getById(workspaceId, id);
     if (!skill) return undefined;
-    const count = await this.repo.linkedAgentsCount(id);
-    return { linked_agents_count: count };
+    const agents = await this.repo.linkedAgents(workspaceId, id);
+    return { linked_agents_count: agents.length, linked_agents: agents };
   }
 
   /**

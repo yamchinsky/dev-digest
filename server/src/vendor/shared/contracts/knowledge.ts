@@ -210,9 +210,18 @@ export type SkillVersion = z.infer<typeof SkillVersion>;
 
 // Read-side aggregates for the Stats tab. Light by design — anything heavier
 // (runs-where-used, hit rate per finding category) belongs in agent_runs
-// queries that we don't expose here yet.
+// queries we don't expose yet. `linked_agents` is what powers the "Agents
+// using this skill" list with Open-in-Editor buttons.
+export const SkillStatsAgent = z.object({
+  id: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+});
+export type SkillStatsAgent = z.infer<typeof SkillStatsAgent>;
+
 export const SkillStats = z.object({
   linked_agents_count: z.number().int(),
+  linked_agents: z.array(SkillStatsAgent),
 });
 export type SkillStats = z.infer<typeof SkillStats>;
 

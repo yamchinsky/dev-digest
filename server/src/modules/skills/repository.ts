@@ -147,6 +147,25 @@ export class SkillsRepository {
     return row?.n ?? 0;
   }
 
+  /** Agents that currently link this skill — id + name + enabled. Used by the
+   *  "Agents using this skill" list in the Stats tab. Workspace-scoped via
+   *  the agents join. */
+  async linkedAgents(
+    workspaceId: string,
+    skillId: string,
+  ): Promise<Array<{ id: string; name: string; enabled: boolean }>> {
+    return this.db
+      .select({
+        id: t.agents.id,
+        name: t.agents.name,
+        enabled: t.agents.enabled,
+      })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agentSkills.agentId, t.agents.id))
+      .where(and(eq(t.agentSkills.skillId, skillId), eq(t.agents.workspaceId, workspaceId)))
+      .orderBy(asc(t.agents.name));
+  }
+
   /** Bulk variant: returns a Map of skill_id → count for the given ids.
    *  Used by the list endpoint to denormalize per-card stats in one query
    *  instead of N queries. Missing ids resolve to 0 (no row in agent_skills). */

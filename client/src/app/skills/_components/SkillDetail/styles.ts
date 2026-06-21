@@ -229,4 +229,18 @@ export const s = {
     fontWeight: 700,
     letterSpacing: "-0.02em",
   } satisfies CSSProperties,
+  statSub: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    marginTop: 6,
+  } satisfies CSSProperties,
+  agentRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 14px",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    background: "var(--bg-surface)",
+  } satisfies CSSProperties,
 } as const;
