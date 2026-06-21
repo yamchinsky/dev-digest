@@ -28,6 +28,7 @@ export interface CreateSkillInput {
   type: SkillType;
   body: string;
   enabled?: boolean;
+  evidenceFiles?: string[];
 }
 
 export interface UpdateSkillInput {
@@ -74,6 +75,7 @@ export class SkillsService {
       source,
       body: input.body,
       enabled: input.enabled,
+      evidenceFiles: input.evidenceFiles,
     });
     return toSkillDto(row);
   }

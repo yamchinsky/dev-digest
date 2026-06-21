@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { EmptyState } from "@devdigest/ui";
+// Deep-import: same reason as loading.tsx — keep charts/Recharts out of the RSC graph.
+import { EmptyState } from "@devdigest/ui/primitives";
 import { AppShell } from "@/components/app-shell";
 import { PageContainer } from "@/components/page-shell";
 

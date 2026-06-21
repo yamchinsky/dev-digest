@@ -1,4 +1,7 @@
-import { Skeleton } from "@devdigest/ui";
+// Deep-import to avoid pulling the @devdigest/ui barrel (with charts/Recharts)
+// into the RSC graph — loading.tsx is a Server Component, and Recharts classes
+// crash on cold RSC compile via the barrel's charts re-export.
+import { Skeleton } from "@devdigest/ui/primitives";
 import { AppShell } from "@/components/app-shell";
 import { PageContainer } from "@/components/page-shell";
 

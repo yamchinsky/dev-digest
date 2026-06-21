@@ -1,0 +1,122 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  card: (status: "pending" | "approved" | "rejected"): CSSProperties => ({
+    borderRadius: 8,
+    borderStyle: "solid",
+    borderColor: "var(--border)",
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    borderLeftColor:
+      status === "approved"
+        ? "var(--ok)"
+        : status === "rejected"
+          ? "var(--text-muted)"
+          : "var(--border-strong)",
+    background: "var(--bg-elevated)",
+    padding: "14px 16px",
+    opacity: status === "rejected" ? 0.6 : 1,
+    transition: "opacity .2s, border-color .12s",
+  }),
+  headerRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 10,
+  } satisfies CSSProperties,
+  categoryBadge: {
+    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+    padding: "2px 8px",
+    borderRadius: 4,
+    background: "var(--bg-subtle, var(--bg))",
+    border: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  confidence: {
+    fontSize: 12,
+    color: "var(--text-muted)",
+    fontVariantNumeric: "tabular-nums",
+  } satisfies CSSProperties,
+  ruleRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 10,
+  } satisfies CSSProperties,
+  ruleText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 1.5,
+    color: "var(--text-primary)",
+    minWidth: 0,
+  } satisfies CSSProperties,
+  editButton: {
+    border: "none",
+    background: "transparent",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    fontSize: 12,
+    padding: "2px 6px",
+    borderRadius: 4,
+  } satisfies CSSProperties,
+  textarea: {
+    width: "100%",
+    minHeight: 60,
+    padding: 8,
+    fontSize: 14,
+    fontFamily: "inherit",
+    lineHeight: 1.5,
+    color: "var(--text-primary)",
+    background: "var(--bg)",
+    border: "1px solid var(--border-strong)",
+    borderRadius: 6,
+    resize: "vertical",
+  } satisfies CSSProperties,
+  editActions: {
+    display: "flex",
+    gap: 8,
+    marginTop: 8,
+  } satisfies CSSProperties,
+  evidenceRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12,
+    color: "var(--text-muted)",
+    marginBottom: 8,
+  } satisfies CSSProperties,
+  evidenceLink: {
+    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+    color: "var(--text-muted)",
+    textDecoration: "none",
+    borderBottom: "1px dashed var(--border-strong)",
+  } satisfies CSSProperties,
+  evidencePlain: {
+    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  snippet: {
+    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+    fontSize: 12,
+    lineHeight: 1.5,
+    padding: 10,
+    background: "var(--bg-subtle, var(--bg))",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+    color: "var(--text-secondary)",
+    maxHeight: 160,
+    overflow: "auto",
+    whiteSpace: "pre",
+    marginBottom: 10,
+  } satisfies CSSProperties,
+  footer: {
+    display: "flex",
+    gap: 8,
+    marginTop: 4,
+  } satisfies CSSProperties,
+} as const;
