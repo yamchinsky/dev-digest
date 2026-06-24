@@ -24,6 +24,7 @@ export interface InsertSkill {
   source: SkillSource;
   body: string;
   enabled?: boolean;
+  evidenceFiles?: string[];
 }
 
 export interface UpdateSkill {
@@ -81,6 +82,7 @@ export class SkillsRepository {
         body: values.body,
         enabled: values.enabled ?? true,
         version: INITIAL_SKILL_VERSION,
+        evidenceFiles: values.evidenceFiles,
       })
       .returning();
     await this.snapshotVersion(row!.id, INITIAL_SKILL_VERSION, row!.body);
