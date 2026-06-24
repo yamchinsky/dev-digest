@@ -57,3 +57,7 @@ export {
 // The single OpenAI-compatible structured provider (OpenRouter), shared by the
 // CI runner and the server's openrouter path. Owns session grouping + guards.
 export { OpenRouterProvider, type OpenRouterProviderOptions } from './llm/openrouter.js';
+
+// Pure formatter: UnifiedDiff → file paths + reconstructed @@ hunk headers only
+// (no line bodies). Used by the intent LLM call to keep the token cost minimal.
+export { formatChangedFilesWithHunkHeaders } from './intent-input.js';

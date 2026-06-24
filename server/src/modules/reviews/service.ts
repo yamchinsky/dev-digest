@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, Intent, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
@@ -7,6 +7,8 @@ import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
+import { deriveIntent, type IntentDerivationResult } from './intent.js';
+import { loadDiff } from './diff-loader.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -197,5 +199,47 @@ export class ReviewService {
         ? this.container.priceBook.estimate(inputs.model, inputs.tokensIn, inputs.tokensOut)
         : null;
     return { ...trace, stats: { ...trace.stats, cost_usd: cost } };
+  }
+
+  // ===========================================================================
+  // Intent derivation
+  // ===========================================================================
+
+  /**
+   * Return the persisted intent for a PR, or `{ intent: null }` when none has
+   * been derived yet. Never returns a 404 — the GET contract returns null so the
+   * client can render the empty state.
+   */
+  async getIntent(
+    workspaceId: string,
+    prId: string,
+  ): Promise<{ intent: Intent | null }> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const stored = await this.repo.getIntent(prId);
+    return { intent: stored ?? null };
+  }
+
+  /**
+   * Re-derive the intent for a PR via the cheap `review_intent` LLM call,
+   * persist it (upsert — idempotent on repeated calls), and return the full
+   * result including provider, model, and token counts.
+   */
+  async recomputeIntent(
+    workspaceId: string,
+    prId: string,
+  ): Promise<IntentDerivationResult> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+
+    const diff = await loadDiff(this.container, this.repo, workspaceId, pull, repo);
+
+    const result = await deriveIntent(this.container, workspaceId, pull, repo, diff);
+
+    await this.repo.upsertIntent(prId, result.intent);
+
+    return result;
   }
 }

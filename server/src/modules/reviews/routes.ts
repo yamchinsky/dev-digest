@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
-import { RunRequest } from '@devdigest/shared';
+import { Intent, RunRequest } from '@devdigest/shared';
 import type { RunEvent } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
@@ -153,6 +153,39 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       return result;
     });
   }
+
+  // ---- Intent: GET (stored intent, null when none derived yet) -----------
+  // Returns { intent: Intent | null }. Never 404 — empty state is { intent: null }.
+  const IntentGetResponse = z.object({
+    intent: Intent.nullable(),
+  });
+
+  app.get('/pulls/:id/intent', { schema: { params: IdParams, response: { 200: IntentGetResponse } } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getIntent(workspaceId, req.params.id);
+  });
+
+  // ---- Intent: POST (recompute / derive) ----------------------------------
+  // Tight per-route rate limit: each call makes a cheap-but-real LLM request.
+  const IntentPostResponse = z.object({
+    intent: Intent,
+    provider: z.string(),
+    model: z.string(),
+    tokensIn: z.number().int(),
+    tokensOut: z.number().int(),
+  });
+
+  app.post(
+    '/pulls/:id/intent',
+    {
+      schema: { params: IdParams, response: { 200: IntentPostResponse } },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.recomputeIntent(workspaceId, req.params.id);
+    },
+  );
 
   // ---- Share a review to an external webhook ------------------------------
   // Lets a user forward a finished review to their own Slack/Discord/CI webhook.

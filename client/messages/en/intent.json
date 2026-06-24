@@ -1,0 +1,10 @@
+{
+  "title": "PR Intent",
+  "emptyTitle": "No intent derived yet",
+  "emptyBody": "Derive the intent to understand what this PR is trying to accomplish and its stated scope.",
+  "deriveButton": "Derive intent",
+  "recomputeButton": "Recompute intent",
+  "inScope": "In scope",
+  "outOfScope": "Out of scope",
+  "producedBy": "Produced by {model}"
+}
