@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -8,6 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { deriveIntent } from './intent.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -104,6 +105,43 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // ---- Shared pre-work: intent derivation (best-effort, NEVER failAll) ----
+    // Try to load the stored intent first (cache hit → no LLM call). If absent,
+    // derive it via a cheap dedicated LLM call using hunk headers only (no diff
+    // line bodies — see R3 token-saving note below). On any failure we warn and
+    // continue with intent=undefined so the agent runs are unaffected.
+    let intentText: string | undefined;
+    await runLog.step(
+      'Deriving PR intent',
+      async () => {
+        try {
+          const cached = await this.repo.getIntent(pull.id);
+          if (cached) {
+            runLog.info('PR intent loaded from cache (no LLM call)');
+            intentText = this.intentToText(cached);
+            return;
+          }
+
+          // No cached intent — derive via cheap LLM call.
+          // Note: diff bodies are excluded from the intent input to save tokens
+          // (only hunk headers + file paths are sent, per R2/R3 design).
+          const result = await deriveIntent(this.container, workspaceId, pull, repo, diff);
+          intentText = this.intentToText(result.intent);
+          runLog.info(
+            `PR intent derived via ${result.provider}/${result.model} (tokensIn=${result.tokensIn}, tokensOut=${result.tokensOut}); diff bodies omitted from intent input to save tokens`,
+          );
+
+          // Persist so subsequent runs and the Intent card pick it up.
+          await this.repo.upsertIntent(pull.id, result.intent);
+        } catch (err) {
+          // Best-effort: warn and continue — intent failure MUST NOT fail agent runs.
+          runLog.info(`[warn] Intent derivation skipped: ${(err as Error).message}`);
+          intentText = undefined;
+        }
+      },
+      { kind: 'tool' },
+    );
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -111,7 +149,7 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intentText);
         logger?.info(
           {
             runId,
@@ -143,6 +181,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    intentText?: string,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -218,6 +257,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Derived intent (cheap pre-work call, shared across all agents in this
+        // run). Omitted when derivation failed or was not attempted.
+        ...(intentText ? { intent: intentText } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -420,6 +462,22 @@ export class ReviewRunExecutor {
     } catch {
       return '';
     }
+  }
+
+  /**
+   * Convert a stored `Intent` to the string injected into the reviewer prompt.
+   * Uses the core `intent` sentence as the primary text, optionally appended
+   * with in-scope / out-of-scope bullet lists for richer context.
+   */
+  private intentToText(intent: Intent): string {
+    const parts: string[] = [intent.intent];
+    if (intent.in_scope && intent.in_scope.length > 0) {
+      parts.push(`In scope: ${intent.in_scope.map((s) => `- ${s}`).join('\n')}`);
+    }
+    if (intent.out_of_scope && intent.out_of_scope.length > 0) {
+      parts.push(`Out of scope: ${intent.out_of_scope.map((s) => `- ${s}`).join('\n')}`);
+    }
+    return parts.join('\n\n');
   }
 
   /**

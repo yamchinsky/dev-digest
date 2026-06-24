@@ -66,6 +66,13 @@ export interface PromptParts {
    * undefined → section omitted.
    */
   prDescription?: string;
+  /**
+   * Derived PR intent / scope (L03 intent cascade). Untrusted (LLM-derived) —
+   * delimiter-wrapped. Rendered AFTER `## PR description` and BEFORE
+   * `## Diff to review`. Empty / undefined → section omitted (no behavior
+   * change — mirror the `callers` slot exactly).
+   */
+  intent?: string;
   /** The unified diff / user task (untrusted content). */
   diff: string;
   /** Optional task framing line, e.g. "Review PR #482 '…'". */
@@ -101,6 +108,9 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
       ? parts.prDescription.slice(0, MAX_PR_DESCRIPTION_CHARS)
       : undefined;
 
+  const intent =
+    parts.intent && parts.intent.trim().length > 0 ? parts.intent : undefined;
+
   const userSections: string[] = [];
   if (parts.task) userSections.push(parts.task);
   if (prDescription) {
@@ -115,6 +125,12 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
   if (parts.callers && parts.callers.trim().length > 0) {
     userSections.push(
       `## Callers of changed symbols\n${wrapUntrusted('callers', parts.callers)}`,
+    );
+  }
+  if (intent) {
+    userSections.push(
+      `## Derived intent / scope\n${wrapUntrusted('derived-intent', intent)}\n` +
+        `Stay within the stated intent/scope; if you spot a serious out-of-scope problem, emit ONE signal finding, not many.`,
     );
   }
   userSections.push(`## Diff to review\n${wrapUntrusted('diff', parts.diff)}`);
@@ -134,6 +150,7 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     callers: parts.callers ?? null,
     repo_map: parts.repoMap ?? null,
     pr_description: prDescription ?? null,
+    intent: intent ?? null,
     user,
   };
 
