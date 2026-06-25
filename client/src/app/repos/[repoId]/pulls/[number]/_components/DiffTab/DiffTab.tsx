@@ -3,7 +3,9 @@
 import React from "react";
 import { SectionLabel, Button } from "@devdigest/ui";
 import { DiffViewer, type DiffCommentApi } from "@/components/diff-viewer";
+import { SmartDiffViewer } from "@/components/diff-viewer/SmartDiffViewer";
 import { usePrComments, useCreatePrComment } from "@/lib/hooks/reviews";
+import { useSmartDiff } from "@/lib/hooks/smart-diff";
 import { notify } from "@/providers/toast";
 import type { PrFile } from "@devdigest/shared";
 
@@ -20,6 +22,8 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
   const create = useCreatePrComment(prId);
   // Comments start hidden so the diff is clean by default — toggle to reveal.
   const [showComments, setShowComments] = React.useState(false);
+
+  const { data: smartDiff, isLoading: smartDiffLoading, isError: smartDiffError } = useSmartDiff(prId);
 
   const commentCount = comments?.length ?? 0;
 
@@ -59,7 +63,14 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
       >
         Files changed · {filesCount} files
       </SectionLabel>
-      <DiffViewer files={files} commenting={commenting} />
+
+      {/* Use SmartDiffViewer when data is available; fall back to flat DiffViewer
+          while loading or on error (the patches are already in `files`). */}
+      {smartDiff && !smartDiffLoading && !smartDiffError ? (
+        <SmartDiffViewer smartDiff={smartDiff} files={files} commenting={commenting} />
+      ) : (
+        <DiffViewer files={files} commenting={commenting} />
+      )}
     </section>
   );
 }

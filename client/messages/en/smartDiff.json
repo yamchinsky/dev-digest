@@ -1,0 +1,24 @@
+{
+  "smartOrder": "Smart order",
+  "originalOrder": "Original order",
+  "headerSummary": "{count} files · +{additions} −{deletions}",
+  "roles": {
+    "core": {
+      "label": "Core logic",
+      "description": "The substance of the change — review closely"
+    },
+    "wiring": {
+      "label": "Wiring",
+      "description": "Hooks the core into the app"
+    },
+    "boilerplate": {
+      "label": "Boilerplate",
+      "description": "Generated · mechanical — skim"
+    }
+  },
+  "roleFiles": "{count} files",
+  "findingsBadge": "{count} findings",
+  "splitBannerTitle": "This PR is {totalLines} lines. Consider splitting:",
+  "splitBannerFile": "{name}: {files}",
+  "emptyState": "No changed files"
+}

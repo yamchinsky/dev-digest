@@ -30,11 +30,40 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+interface FileCardProps {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  /**
+   * Override the initial open state (uncontrolled mode).
+   * When absent, falls back to the ≤AUTO_EXPAND_MAX_LINES auto-rule.
+   */
+  defaultOpen?: boolean;
+  /**
+   * Controlled open state. When provided, FileCard delegates toggle to the
+   * caller via `onToggle` instead of managing its own state.
+   */
+  open?: boolean;
+  /** Called when the header is clicked in controlled mode. */
+  onToggle?: () => void;
+  /** Optional node rendered in the file header (e.g. a finding indicator badge). */
+  badge?: React.ReactNode;
+}
+
+export function FileCard({ file, commenting, defaultOpen, open: controlledOpen, onToggle, badge }: FileCardProps) {
   const t = useTranslations("shell");
-  const [open, setOpen] = React.useState(
-    (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
-  );
+
+  const autoExpand = (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES;
+  const initialOpen = defaultOpen !== undefined ? defaultOpen : autoExpand;
+
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(initialOpen);
+
+  // Determine effective open value and toggle handler.
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const handleToggle = isControlled
+    ? () => onToggle?.()
+    : () => setUncontrolledOpen((o) => !o);
+
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
 
   // Group this file's comments into threads, then split into ones we can anchor
@@ -54,7 +83,7 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
 
   return (
     <div style={s.fileCard}>
-      <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
+      <div onClick={handleToggle} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
         <span className="mono" style={s.filePath}>
@@ -72,6 +101,7 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
             {commentCount}
           </span>
         )}
+        {badge}
       </div>
       {open && (
         <div style={s.fileBody}>
