@@ -7,7 +7,7 @@ import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
-import { deriveIntent, type IntentDerivationResult } from './intent.js';
+import { deriveIntent, resolveLinkedIssue, type IntentDerivationResult } from './intent.js';
 import { loadDiff } from './diff-loader.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
@@ -236,7 +236,10 @@ export class ReviewService {
 
     const diff = await loadDiff(this.container, this.repo, workspaceId, pull, repo);
 
-    const result = await deriveIntent(this.container, workspaceId, pull, repo, diff);
+    // Best-effort linked-issue context (R2b): resolved from the PR body via the
+    // GitHub port; omitted silently when absent so recompute never fails on it.
+    const linkedIssue = await resolveLinkedIssue(this.container, repo, pull.body);
+    const result = await deriveIntent(this.container, workspaceId, pull, repo, diff, { linkedIssue });
 
     await this.repo.upsertIntent(prId, result.intent);
 

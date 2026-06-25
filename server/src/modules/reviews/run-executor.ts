@@ -8,7 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
-import { deriveIntent } from './intent.js';
+import { deriveIntent, resolveLinkedIssue } from './intent.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -125,10 +125,13 @@ export class ReviewRunExecutor {
           // No cached intent — derive via cheap LLM call.
           // Note: diff bodies are excluded from the intent input to save tokens
           // (only hunk headers + file paths are sent, per R2/R3 design).
-          const result = await deriveIntent(this.container, workspaceId, pull, repo, diff);
+          // Best-effort linked-issue context (R2b): resolved from the PR body
+          // via the GitHub port; null on miss/failure so derivation continues.
+          const linkedIssue = await resolveLinkedIssue(this.container, repo, pull.body);
+          const result = await deriveIntent(this.container, workspaceId, pull, repo, diff, { linkedIssue });
           intentText = this.intentToText(result.intent);
           runLog.info(
-            `PR intent derived via ${result.provider}/${result.model} (tokensIn=${result.tokensIn}, tokensOut=${result.tokensOut}); diff bodies omitted from intent input to save tokens`,
+            `PR intent derived via ${result.provider}/${result.model} (tokensIn=${result.tokensIn}, tokensOut=${result.tokensOut}${linkedIssue ? '; linked issue included' : ''}); diff bodies omitted from intent input to save tokens`,
           );
 
           // Persist so subsequent runs and the Intent card pick it up.

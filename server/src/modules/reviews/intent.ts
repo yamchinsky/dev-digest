@@ -43,8 +43,8 @@ Use the ticket/spec/plan text in the PR body and linked issue as the primary mot
  *
  * (a) Resolves provider+model via `resolveFeatureModel` (never hardcoded).
  * (b) Accepts a pre-fetched `linkedIssue` to avoid extra network calls;
- *     may also attempt a live GitHub resolve when the caller passes a
- *     `githubResolve` callback — on any failure the issue is simply omitted.
+ *     callers use `resolveLinkedIssue` (below) to look it up best-effort —
+ *     on any miss/failure the issue block is simply omitted.
  * (c) Builds the user message from title, body, linked-issue body, and the
  *     compact `formatChangedFilesWithHunkHeaders` output — NO diff line bodies.
  * (d) Calls `llm.completeStructured` with `schema: Intent, maxRetries: 1`.
@@ -138,4 +138,34 @@ export async function deriveIntent(
     tokensIn: result.tokensIn,
     tokensOut: result.tokensOut,
   };
+}
+
+/**
+ * Issue-reference heuristic, kept in sync with the octokit import-time
+ * resolver (`adapters/github/octokit.ts`): `Closes/Fixes/Resolves #N`, with
+ * the keyword optional so a bare `#N` also matches.
+ */
+const LINKED_ISSUE_RE = /(?:closes|fixes|resolves)?\s*#(\d+)/i;
+
+/**
+ * Best-effort resolve of a PR's linked issue from its body, via the GitHub
+ * port. Returns the issue title + body when a `#N` reference resolves, or
+ * `null` when there is no reference, no GitHub token, or the API call fails.
+ * NEVER throws — intent derivation stays best-effort even when GitHub is
+ * unavailable, so the caller simply proceeds without the linked-issue context.
+ */
+export async function resolveLinkedIssue(
+  container: Container,
+  repoRow: typeof schema.repos.$inferSelect,
+  body: string | null | undefined,
+): Promise<LinkedIssueMeta | null> {
+  const match = body?.match(LINKED_ISSUE_RE);
+  if (!match?.[1]) return null;
+  try {
+    const github = await container.github();
+    const issue = await github.getIssue({ owner: repoRow.owner, name: repoRow.name }, Number(match[1]));
+    return { title: issue.title, body: issue.body };
+  } catch {
+    return null;
+  }
 }
