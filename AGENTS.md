@@ -118,3 +118,5 @@ Auto-load by trigger description; nothing to invoke manually.
 - `frontend-architecture` — folder structure and code organization for `client/` (React + Next.js App Router).
 - `engineering-insights` — appends non-obvious findings to the right `INSIGHTS.md` (see *Session context* above).
 - `pr-self-review` — local pre-PR gate; runs the current diff through relevant skills and blocks `gh pr create` / `git push` on at least one CRITICAL finding.
+- `plan-verifier` — requirement-coverage checker; fires on "verify the plan", "did we cover all requirements", "requirement coverage", "check plan against code". Maps every R-ID + acceptance criterion in a `docs/plans/<feature>.md` to concrete evidence and emits a coverage matrix.
+- `doc-writer` — documentation authoring skill; fires on "write docs for", "document this feature", "turn this plan into docs", "add a diagram", "where should this doc go". Selects the correct Diátaxis type, places the doc in the right repo location, and embeds Mermaid diagrams with captions.
