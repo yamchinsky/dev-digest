@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { UnifiedDiff } from '@devdigest/shared';
 import { Intent } from '@devdigest/shared';
 import { MockLLMProvider, MockSecretsProvider } from '../../adapters/mocks.js';
-import { deriveIntent } from './intent.js';
+import { deriveIntent, resolveLinkedIssue } from './intent.js';
 import type { Container } from '../../platform/container.js';
 import type { PullRow } from './repository.js';
 import type * as schema from '../../db/schema.js';
@@ -271,5 +271,63 @@ describe('deriveIntent (hermetic unit)', () => {
     expect(result.intent.intent).toBe(INTENT_FIXTURE.intent);
     expect(result.intent.in_scope).toEqual(INTENT_FIXTURE.in_scope);
     expect(result.intent.out_of_scope).toEqual(INTENT_FIXTURE.out_of_scope);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveLinkedIssue — best-effort linked-issue lookup via the GitHub port (R2b)
+// ---------------------------------------------------------------------------
+
+describe('resolveLinkedIssue (hermetic unit)', () => {
+  /** Build a container whose `github()` returns a stub with the given getIssue. */
+  function containerWithGitHub(getIssue: (repo: unknown, n: number) => Promise<unknown>): Container {
+    return {
+      github: async () => ({ getIssue }),
+    } as unknown as Container;
+  }
+
+  it('resolves the linked issue title + body from a "Closes #N" body', async () => {
+    const getIssue = vi.fn().mockResolvedValue({
+      number: 471,
+      title: 'Rate limiting requirements',
+      body: 'Throttle public endpoints at 100 req/min per IP.',
+      state: 'open',
+    });
+    const container = containerWithGitHub(getIssue);
+
+    const result = await resolveLinkedIssue(container, REPO, 'Adds rate limiting. Closes #471.');
+
+    expect(result).toEqual({
+      title: 'Rate limiting requirements',
+      body: 'Throttle public endpoints at 100 req/min per IP.',
+    });
+    // Resolved against the repo's owner/name and the parsed issue number.
+    expect(getIssue).toHaveBeenCalledWith({ owner: 'acme', name: 'payments-api' }, 471);
+  });
+
+  it('returns null when the body has no issue reference', async () => {
+    const getIssue = vi.fn();
+    const container = containerWithGitHub(getIssue);
+
+    const result = await resolveLinkedIssue(container, REPO, 'No ticket linked here.');
+
+    expect(result).toBeNull();
+    expect(getIssue).not.toHaveBeenCalled(); // no network call without a ref
+  });
+
+  it('returns null (never throws) when the GitHub call fails', async () => {
+    const getIssue = vi.fn().mockRejectedValue(new Error('401 Bad credentials'));
+    const container = containerWithGitHub(getIssue);
+
+    const result = await resolveLinkedIssue(container, REPO, 'Fixes #999.');
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when the body is null/undefined', async () => {
+    const container = containerWithGitHub(vi.fn());
+
+    expect(await resolveLinkedIssue(container, REPO, null)).toBeNull();
+    expect(await resolveLinkedIssue(container, REPO, undefined)).toBeNull();
   });
 });
