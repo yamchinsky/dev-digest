@@ -3,7 +3,7 @@
 "use client";
 
 import React from "react";
-import { commentTargetFor, type CommentThread, type DiffCommentApi, cs } from "../comments";
+import { commentTargetFor, keysForLine, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { type Line } from "../helpers";
 import { s, lineRowFor, lineSignFor } from "../styles";
 import { CommentThreadView } from "../CommentThreadView";
@@ -35,8 +35,15 @@ export function CodeLine({
   const target = commenting?.canComment ? commentTargetFor(ln) : null;
   const showAdd = hover && !!target && !composing;
 
+  // Stable, file-namespaced scroll anchor for finding-to-line navigation.
+  // Prefer RIGHT:n (new-side) because findings are keyed to the new side.
+  const firstKey = keysForLine(ln)[0];
+  const lineId = firstKey ? `dl:${path}:${firstKey}` : undefined;
+
   return (
     <div
+      id={lineId}
+      data-line-key={lineId}
       style={cs.rowWrap}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

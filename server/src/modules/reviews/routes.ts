@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
-import { Intent, RunRequest } from '@devdigest/shared';
+import { Intent, RunRequest, SmartDiff } from '@devdigest/shared';
 import type { RunEvent } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
@@ -164,6 +164,18 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(container, req);
     return service.getIntent(workspaceId, req.params.id);
   });
+
+  // ---- Smart Diff: GET (deterministic, no LLM call) -----------------------
+  // Classifies PR files by risk (core/wiring/boilerplate) and composes with
+  // the latest review's findings. Returns immediately after import; no model step.
+  app.get(
+    '/pulls/:id/smart-diff',
+    { schema: { params: IdParams, response: { 200: SmartDiff } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.smartDiffForPull(workspaceId, req.params.id);
+    },
+  );
 
   // ---- Intent: POST (recompute / derive) ----------------------------------
   // Tight per-route rate limit: each call makes a cheap-but-real LLM request.
