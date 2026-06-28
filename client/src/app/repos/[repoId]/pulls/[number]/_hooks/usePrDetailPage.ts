@@ -55,6 +55,7 @@ export function usePrDetailPage(repoId: string, number: string) {
 
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
+  const findingId = search.get("findingId");
 
   const setParam = React.useCallback(
     (key: string, val: string | null) => {
@@ -68,6 +69,18 @@ export function usePrDetailPage(repoId: string, number: string) {
   const setTab = React.useCallback((t: string) => setParam("tab", t), [setParam]);
   const openTrace = React.useCallback((id: string) => setParam("trace", id), [setParam]);
   const closeTrace = React.useCallback(() => setParam("trace", null), [setParam]);
+
+  // Clicking a Smart Diff severity badge: jump to the Findings tab AND target
+  // the clicked finding in ONE router.replace (no intermediate diff-tab render).
+  const openFinding = React.useCallback(
+    (id: string) => {
+      const sp = new URLSearchParams(search.toString());
+      sp.set("tab", "findings");
+      sp.set("findingId", id);
+      router.replace(`/repos/${repoId}/pulls/${number}?${sp.toString()}`);
+    },
+    [search, router, repoId, number],
+  );
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
@@ -93,9 +106,11 @@ export function usePrDetailPage(repoId: string, number: string) {
     reviewRunning,
     tab,
     traceRunId,
+    findingId,
     setTab,
     openTrace,
     closeTrace,
+    openFinding,
     cancel,
     deleteRun,
     refetchReviews,

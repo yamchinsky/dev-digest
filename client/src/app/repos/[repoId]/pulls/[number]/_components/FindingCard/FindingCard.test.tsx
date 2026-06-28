@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord } from "@devdigest/shared";
@@ -56,5 +56,33 @@ describe("FindingCard (smoke, both themes)", () => {
     expect(onAction).toHaveBeenCalledWith("accept");
     fireEvent.click(screen.getByText("Dismiss"));
     expect(onAction).toHaveBeenCalledWith("dismiss");
+  });
+});
+
+describe("FindingCard deep-link (targetFindingId)", () => {
+  let scrollIntoViewMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    scrollIntoViewMock = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoViewMock;
+  });
+  afterEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (Element.prototype as any).scrollIntoView;
+  });
+
+  it("expands and scrolls into view when targetFindingId matches", () => {
+    renderWithIntl(<FindingCard f={FINDING} targetFindingId={FINDING.id} onAction={() => {}} />);
+
+    // Body (rationale) becomes visible even though defaultExpanded is unset.
+    expect(screen.getByText(/A.*Stripe key is committed/)).toBeInTheDocument();
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+  });
+
+  it("stays collapsed and does not scroll when targetFindingId does not match", () => {
+    renderWithIntl(<FindingCard f={FINDING} targetFindingId="other-id" onAction={() => {}} />);
+
+    // Collapsed: the rationale body is not rendered.
+    expect(screen.queryByText(/A.*Stripe key is committed/)).not.toBeInTheDocument();
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
   });
 });

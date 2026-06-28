@@ -109,12 +109,38 @@ describe('AI contracts parse fixtures', () => {
       groups: [
         {
           role: 'core',
-          files: [{ path: 'a.ts', additions: 84, deletions: 0, finding_lines: [28, 52] }],
+          files: [
+            {
+              path: 'a.ts',
+              additions: 84,
+              deletions: 0,
+              finding_lines: [28, 52],
+              findings: [
+                { id: 'f-1', start_line: 28, severity: 'CRITICAL' },
+                { id: 'f-2', start_line: 52, severity: 'WARNING' },
+              ],
+            },
+          ],
         },
       ],
       split_suggestion: { too_big: false, total_lines: 285, proposed_splits: [] },
     });
     expect(d.groups[0]!.role).toBe('core');
+    expect(d.groups[0]!.files[0]!.findings).toHaveLength(2);
+    expect(d.groups[0]!.files[0]!.findings[0]!.id).toBe('f-1');
+  });
+
+  it('SmartDiff — findings defaults to [] when omitted (backward compatible)', () => {
+    const d = SmartDiff.parse({
+      groups: [
+        {
+          role: 'core',
+          files: [{ path: 'a.ts', additions: 84, deletions: 0, finding_lines: [28, 52] }],
+        },
+      ],
+      split_suggestion: { too_big: false, total_lines: 285, proposed_splits: [] },
+    });
+    expect(d.groups[0]!.files[0]!.findings).toEqual([]);
   });
 
   it('Conformance / Onboarding / EvalRun / MemoryItem', () => {

@@ -24,8 +24,19 @@ _2026-06-19_ · `src/vendor/ui/primitives/Chip.tsx:35-40`
 
 The `color` prop on `Chip` is applied via `<I size={13} style={color ? { color } : undefined}/>` — only to the icon. The chip's own border/background swap between `var(--accent)` and `var(--border)` based on `active`/`hover`, regardless of `color`. Severity-tinted chips (e.g. CRITICAL red icon) therefore keep the global accent visual language; don't reach for a "tint the whole chip" variant — that breaks the toolbar's accent uniformity. Matches the standalone design's `findings.jsx → FindingsPanel` 1-to-1.
 
+### `<SeverityBadge compact />` is icon-ONLY — it drops the text label
+_2026-06-28_ · `src/vendor/ui/primitives/Badge.tsx:80`, `src/components/diff-viewer/CodeLine/CodeLine.tsx`
+
+`SeverityBadge` renders `{compact ? null : s.label}` — so `compact` shows just the severity icon, no word. Reaching for it to make an in-diff finding badge produced a badge so small it read as "no badge at all" against the code (the in-diff design wants a visible `icon + lowercase label` pill: blocker / warning / suggestion). When you need a labelled severity pill in a tight row, don't pass `compact`; build a small pill from the `SEV[severity]` tokens (`.c`, `.bg`, `.icon`) and your own label map — note the design uses **"blocker"** for `CRITICAL`, not `SEV.CRITICAL.label` ("Critical").
+
 ## Tool & Library Notes
-_None yet._
+
+### A `<button>` whose only child is an icon-only `SeverityBadge` is invisible to `getByRole("button", { name })`
+_2026-06-28_ · `src/components/diff-viewer/CodeLine/CodeLine.tsx` (in-line finding badges), `SmartDiffViewer.test.tsx`
+
+When a clickable wrapper `<button aria-label="…">` contains only `<SeverityBadge compact />` (which renders an SVG icon and `null` label, no text node), RTL computes the button's accessible name from its children and ends up empty — so `screen.getByRole("button", { name: "view warning finding" })` throws "Unable to find" even though the `aria-label` is present in the DOM. The `<I>` icons in `vendor/ui/primitives/Badge.tsx` carry no `aria-hidden`, so they don't contribute a name but the children-based name calc still wins over the wrapper's `aria-label`. Fix in tests: query these icon-only buttons with `screen.getByLabelText("View warning finding")` instead of `getByRole(..., { name })`.
+
+> Updated 2026-06-28: the in-diff badge no longer uses `compact` — it renders a visible lowercase label ("blocker"/"warning"/"suggestion") next to the icon to match the design, so `getByRole("button", { name })` works again for it. The accessible-name-from-children quirk still applies to any *icon-only* button you build, so the lesson stands; it just no longer bites this specific badge.
 
 ## Recurring Errors & Fixes
 

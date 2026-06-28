@@ -15,9 +15,11 @@ interface DiffTabProps {
   files: PrFile[];
   /** Inline commenting is offered only on open PRs (GitHub rejects otherwise). */
   canComment?: boolean;
+  /** Clicking a severity badge navigates to the Findings tab and opens this id. */
+  onOpenFinding?: (findingId: string) => void;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+export function DiffTab({ prId, filesCount, files, canComment, onOpenFinding }: DiffTabProps) {
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
   // Comments start hidden so the diff is clean by default — toggle to reveal.
@@ -67,7 +69,12 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
       {/* Use SmartDiffViewer when data is available; fall back to flat DiffViewer
           while loading or on error (the patches are already in `files`). */}
       {smartDiff && !smartDiffLoading && !smartDiffError ? (
-        <SmartDiffViewer smartDiff={smartDiff} files={files} commenting={commenting} />
+        <SmartDiffViewer
+          smartDiff={smartDiff}
+          files={files}
+          commenting={commenting}
+          onOpenFinding={onOpenFinding}
+        />
       ) : (
         <DiffViewer files={files} commenting={commenting} />
       )}

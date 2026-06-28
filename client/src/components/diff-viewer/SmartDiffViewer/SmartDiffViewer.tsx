@@ -6,9 +6,11 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import type { SmartDiff, SmartDiffRole, PrFile } from "@devdigest/shared";
+import type { SmartDiff, SmartDiffRole, SmartDiffFinding, PrFile } from "@devdigest/shared";
 import { FileCard } from "@/components/diff-viewer/FileCard";
+import type { LineFinding } from "@/components/diff-viewer/CodeLine";
 import type { DiffCommentApi } from "@/components/diff-viewer/comments";
+import { SEVERITY_RANK } from "./constants";
 import { sv } from "./styles";
 
 // ---- role config --------------------------------------------------------
@@ -80,46 +82,66 @@ function FindingIndicator({
 
 // ---- SmartDiffFileRow: one file in Smart mode -------------------------
 
+/** new-side line number → findings on that line, for in-line clickable badges. */
+function lineMapFor(findings: SmartDiffFinding[]): Map<number, LineFinding[]> {
+  const m = new Map<number, LineFinding[]>();
+  for (const f of findings) {
+    const entry: LineFinding = { id: f.id, severity: f.severity };
+    const list = m.get(f.start_line);
+    if (list) list.push(entry);
+    else m.set(f.start_line, [entry]);
+  }
+  return m;
+}
+
+/** The file's most-severe finding (tie-break: lowest start_line), or null. */
+function mostSevereFinding(findings: SmartDiffFinding[]): SmartDiffFinding | null {
+  let best: SmartDiffFinding | null = null;
+  for (const f of findings) {
+    if (
+      best == null ||
+      SEVERITY_RANK[f.severity] > SEVERITY_RANK[best.severity] ||
+      (SEVERITY_RANK[f.severity] === SEVERITY_RANK[best.severity] && f.start_line < best.start_line)
+    ) {
+      best = f;
+    }
+  }
+  return best;
+}
+
 function SmartDiffFileRow({
   smartFile,
   prFile,
   commenting,
+  onOpenFinding,
   t,
 }: {
-  smartFile: { path: string; finding_lines: number[] };
+  smartFile: { path: string; finding_lines: number[]; findings: SmartDiffFinding[] };
   prFile: PrFile;
   commenting?: DiffCommentApi;
+  /** Navigate to the Findings tab and open the clicked finding's card. */
+  onOpenFinding?: (findingId: string) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const hasFindings = smartFile.finding_lines.length > 0;
+  const hasFindings = smartFile.findings.length > 0;
 
   // Files with findings start open; others start collapsed.
   const [open, setOpen] = React.useState(hasFindings);
 
-  function handleFindingClick() {
-    const firstLine = smartFile.finding_lines[0];
-    if (firstLine == null) return;
-    const id = `dl:${smartFile.path}:RIGHT:${firstLine}`;
+  // new-side line number → findings on that line, for in-line clickable badges.
+  const findingsByLine = React.useMemo(() => lineMapFor(smartFile.findings), [smartFile.findings]);
 
-    if (!open) {
-      // Expand first, then scroll on the next animation frame so the DOM is
-      // painted before we try to find the element.
-      setOpen(true);
-      requestAnimationFrame(() => {
-        document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-    } else {
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }
+  // Aggregated header badge: deep-links to the file's most-severe finding.
+  const headerTarget = React.useMemo(() => mostSevereFinding(smartFile.findings), [smartFile.findings]);
 
-  const badge = hasFindings ? (
-    <FindingIndicator
-      count={smartFile.finding_lines.length}
-      ariaLabel={t("findingsBadge", { count: smartFile.finding_lines.length })}
-      onClick={handleFindingClick}
-    />
-  ) : undefined;
+  const badge =
+    hasFindings && headerTarget ? (
+      <FindingIndicator
+        count={smartFile.findings.length}
+        ariaLabel={t("findingsBadge", { count: smartFile.findings.length })}
+        onClick={() => onOpenFinding?.(headerTarget.id)}
+      />
+    ) : undefined;
 
   return (
     <FileCard
@@ -128,6 +150,8 @@ function SmartDiffFileRow({
       onToggle={() => setOpen((v) => !v)}
       commenting={commenting}
       badge={badge}
+      findingsByLine={findingsByLine}
+      onFindingClick={onOpenFinding}
     />
   );
 }
@@ -139,9 +163,11 @@ export interface SmartDiffViewerProps {
   /** PrFile list that carries the actual patches (not available on smartDiff). */
   files: PrFile[];
   commenting?: DiffCommentApi;
+  /** Clicking a severity badge navigates to the Findings tab and opens this id. */
+  onOpenFinding?: (findingId: string) => void;
 }
 
-export function SmartDiffViewer({ smartDiff, files, commenting }: SmartDiffViewerProps) {
+export function SmartDiffViewer({ smartDiff, files, commenting, onOpenFinding }: SmartDiffViewerProps) {
   const t = useTranslations("smartDiff");
   const [smartOrder, setSmartOrder] = React.useState(true);
 
@@ -243,6 +269,7 @@ export function SmartDiffViewer({ smartDiff, files, commenting }: SmartDiffViewe
                         smartFile={sf}
                         prFile={prFile}
                         commenting={commenting}
+                        onOpenFinding={onOpenFinding}
                         t={t}
                       />
                     );
@@ -258,7 +285,13 @@ export function SmartDiffViewer({ smartDiff, files, commenting }: SmartDiffViewe
       {!smartOrder && (
         <div style={sv.fileList}>
           {allFilesSorted.map(({ sf, prFile }) => (
-            <FileCard key={sf.path} file={prFile} commenting={commenting} />
+            <FileCard
+              key={sf.path}
+              file={prFile}
+              commenting={commenting}
+              findingsByLine={lineMapFor(sf.findings)}
+              onFindingClick={onOpenFinding}
+            />
           ))}
         </div>
       )}

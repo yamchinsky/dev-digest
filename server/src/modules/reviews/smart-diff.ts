@@ -8,7 +8,13 @@
  * All string/numeric literals live in smart-diff.constants.ts.
  */
 
-import type { SmartDiff, SmartDiffFile, SmartDiffRole } from '@devdigest/shared';
+import type {
+  SmartDiff,
+  SmartDiffFile,
+  SmartDiffFinding,
+  SmartDiffRole,
+  Severity,
+} from '@devdigest/shared';
 import {
   BARREL,
   BOILERPLATE_EXT,
@@ -118,9 +124,11 @@ export interface PrFileInput {
 
 /** Input shape for a single finding (only the fields we need). */
 export interface FindingInput {
+  id: string;
   file: string;
   start_line: number;
   end_line?: number | null;
+  severity: Severity;
 }
 
 /**
@@ -131,6 +139,9 @@ export interface FindingInput {
  *   tie-broken by path (ascending).
  * - `finding_lines` = sorted, deduped start-lines of findings whose `file`
  *   equals the file's `path`.
+ * - `findings` = the same findings, NOT deduped (id + severity preserved so a
+ *   clickable in-diff badge can deep-link to a specific FindingCard), sorted by
+ *   start_line then id for stable output.
  * - `split_suggestion.proposed_splits` emitted only when `too_big` AND there
  *   are ≥2 distinct top-level directories among core files; otherwise `[]`.
  */
@@ -138,8 +149,11 @@ export function composeSmartDiff(
   prFiles: PrFileInput[],
   findings: FindingInput[],
 ): SmartDiff {
-  // Build a lookup: path → sorted+deduped start-lines
+  // Build a lookup: path → sorted+deduped start-lines (for in-diff anchors)
   const findingsByPath = new Map<string, Set<number>>();
+  // And a parallel lookup: path → full findings (NOT deduped; carries id +
+  // severity so the clickable badge can target a specific FindingCard).
+  const fullFindingsByPath = new Map<string, SmartDiffFinding[]>();
   for (const finding of findings) {
     const existing = findingsByPath.get(finding.file);
     if (existing) {
@@ -147,6 +161,15 @@ export function composeSmartDiff(
     } else {
       findingsByPath.set(finding.file, new Set([finding.start_line]));
     }
+
+    const entry: SmartDiffFinding = {
+      id: finding.id,
+      start_line: finding.start_line,
+      severity: finding.severity,
+    };
+    const list = fullFindingsByPath.get(finding.file);
+    if (list) list.push(entry);
+    else fullFindingsByPath.set(finding.file, [entry]);
   }
 
   // Bucket files by role
@@ -163,12 +186,25 @@ export function composeSmartDiff(
       ? [...rawLines].sort((a, b) => a - b)
       : [];
 
+    const fileFindings = (fullFindingsByPath.get(f.path) ?? [])
+      .slice()
+      .sort((a, b) =>
+        a.start_line !== b.start_line
+          ? a.start_line - b.start_line
+          : a.id < b.id
+            ? -1
+            : a.id > b.id
+              ? 1
+              : 0,
+      );
+
     buckets[role].push({
       path: f.path,
       pseudocode_summary: null,
       additions: f.additions,
       deletions: f.deletions,
       finding_lines,
+      findings: fileFindings,
     });
   }
 

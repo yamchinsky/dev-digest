@@ -16,7 +16,7 @@ import {
   type DiffCommentApi,
 } from "../comments";
 import { s, chevronFor } from "../styles";
-import { CodeLine } from "../CodeLine";
+import { CodeLine, type LineFinding } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
 
 /** Threads anchored to a given parsed line (RIGHT=new, LEFT=old). */
@@ -47,9 +47,22 @@ interface FileCardProps {
   onToggle?: () => void;
   /** Optional node rendered in the file header (e.g. a finding indicator badge). */
   badge?: React.ReactNode;
+  /** new-side line number → findings on that line (Smart Diff in-line badges). */
+  findingsByLine?: Map<number, LineFinding[]>;
+  /** Navigate to the Findings tab and open the clicked finding's card. */
+  onFindingClick?: (findingId: string) => void;
 }
 
-export function FileCard({ file, commenting, defaultOpen, open: controlledOpen, onToggle, badge }: FileCardProps) {
+export function FileCard({
+  file,
+  commenting,
+  defaultOpen,
+  open: controlledOpen,
+  onToggle,
+  badge,
+  findingsByLine,
+  onFindingClick,
+}: FileCardProps) {
   const t = useTranslations("shell");
 
   const autoExpand = (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES;
@@ -115,6 +128,8 @@ export function FileCard({ file, commenting, defaultOpen, open: controlledOpen, 
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
+                findingsOnLine={ln.newNo != null ? findingsByLine?.get(ln.newNo) : undefined}
+                onFindingClick={onFindingClick}
               />
             ))
           )}

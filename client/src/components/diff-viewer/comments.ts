@@ -129,6 +129,32 @@ export const cs = {
     zIndex: 1,
     boxShadow: "0 1px 3px rgba(0,0,0,.35)",
   } satisfies CSSProperties,
+  /** Right-aligned strip of clickable severity badges on a code line. */
+  lineBadges: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    paddingRight: 10,
+    marginLeft: "auto",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  /** A severity-tinted, clickable in-line finding pill (icon + lowercase label). */
+  lineBadgeBtn: (color: string, bg: string): CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "1px 8px",
+    borderRadius: 5,
+    border: "none",
+    cursor: "pointer",
+    fontSize: 11,
+    fontWeight: 600,
+    lineHeight: 1.5,
+    letterSpacing: "0.02em",
+    color,
+    background: bg,
+    whiteSpace: "nowrap",
+  }),
   /** Indented rail for threads/composer, aligned under the code (past gutter). */
   thread: {
     margin: "6px 14px 8px 58px",
