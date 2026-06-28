@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity } from './findings.js';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
@@ -81,12 +82,24 @@ export type PrHistory = z.infer<typeof PrHistory>;
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
+/** One finding anchored to a Smart Diff file, carrying the id needed to
+ *  deep-link a clickable in-diff badge to its FindingCard. `finding_lines`
+ *  (below) stays the deduped line-number list used for in-diff scroll anchors;
+ *  this list keeps every finding distinct (two on the same line don't merge). */
+export const SmartDiffFinding = z.object({
+  id: z.string(),
+  start_line: z.number().int(),
+  severity: Severity,
+});
+export type SmartDiffFinding = z.infer<typeof SmartDiffFinding>;
+
 export const SmartDiffFile = z.object({
   path: z.string(),
   pseudocode_summary: z.string().nullish(),
   additions: z.number().int(),
   deletions: z.number().int(),
   finding_lines: z.array(z.number().int()),
+  findings: z.array(SmartDiffFinding).default([]),
 });
 export type SmartDiffFile = z.infer<typeof SmartDiffFile>;
 

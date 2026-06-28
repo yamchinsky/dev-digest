@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, Intent, RunEventKind, RunTrace, SmartDiff } from '@devdigest/shared';
+import type { FindingActionKind, Intent, RunEventKind, RunTrace, Severity, SmartDiff } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
@@ -229,9 +229,11 @@ export class ReviewService {
         deletions: f.deletions,
       })),
       findings.map((f) => ({
+        id: f.id,
         file: f.file,
         start_line: f.startLine,
         end_line: f.endLine,
+        severity: f.severity as Severity,
       })),
     );
   }

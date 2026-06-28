@@ -85,6 +85,7 @@ const SMART_DIFF_BASE: SmartDiff = {
           additions: 12,
           deletions: 0,
           finding_lines: [12],
+          findings: [{ id: "find-1", start_line: 12, severity: "WARNING" }],
         },
       ],
     },
@@ -96,6 +97,7 @@ const SMART_DIFF_BASE: SmartDiff = {
           additions: 2,
           deletions: 0,
           finding_lines: [],
+          findings: [],
         },
       ],
     },
@@ -107,6 +109,7 @@ const SMART_DIFF_BASE: SmartDiff = {
           additions: 2,
           deletions: 0,
           finding_lines: [],
+          findings: [],
         },
       ],
     },
@@ -187,72 +190,69 @@ describe("SmartDiffViewer", () => {
     ).toBeInTheDocument();
   });
 
-  it("should call scrollIntoView on the finding anchor when the core file is expanded and the badge is clicked", async () => {
+  it("should call onOpenFinding with the file's finding id when the header badge is clicked", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<SmartDiffViewer smartDiff={SMART_DIFF_BASE} files={PR_FILES} />);
+    const onOpenFinding = vi.fn();
+    renderWithProviders(
+      <SmartDiffViewer smartDiff={SMART_DIFF_BASE} files={PR_FILES} onOpenFinding={onOpenFinding} />,
+    );
 
-    // The core file starts expanded (has findings), so the anchor element exists.
+    // The aggregated header badge deep-links to the file's (only) finding.
     const badge = screen.getByRole("button", { name: "1 findings" });
     await user.click(badge);
 
-    // scrollIntoView must have been called on the anchor element whose id
-    // matches the line-anchor convention: dl:<path>:RIGHT:<line>
-    await waitFor(() => {
-      expect(scrollIntoViewMock).toHaveBeenCalledWith({
-        behavior: "smooth",
-        block: "center",
-      });
-    });
-
-    // Confirm it was called on the correct element
-    const calledOnElement = scrollIntoViewMock.mock.instances[0] as Element | undefined;
-    expect(calledOnElement?.id).toBe("dl:src/app/feature.ts:RIGHT:12");
+    expect(onOpenFinding).toHaveBeenCalledWith("find-1");
   });
 
-  it("should expand a collapsed file and then call scrollIntoView when its finding badge is clicked", async () => {
+  it("should render a clickable in-line severity badge on the finding's line and call onOpenFinding", async () => {
     const user = userEvent.setup();
+    const onOpenFinding = vi.fn();
+    renderWithProviders(
+      <SmartDiffViewer smartDiff={SMART_DIFF_BASE} files={PR_FILES} onOpenFinding={onOpenFinding} />,
+    );
 
-    // Craft a SmartDiff where the core file starts collapsed: no finding_lines,
-    // but we inject findings via a modified SmartDiff that has findings but
-    // a very large line count so it would auto-collapse... Actually the collapse
-    // logic in SmartDiffFileRow is: hasFindings → open=true, no findings → open=false.
-    // To test the "collapsed → click badge → expand → scroll" path, we need a
-    // file that HAS findings but starts collapsed.  The only way that happens is
-    // if the file has findings AND something forces it closed.  In the current
-    // component, hasFindings always means open=true on mount — so this specific
-    // sub-case (badge click on a collapsed-but-has-findings file) is unreachable
-    // via normal initial render.
-    //
-    // Instead we test the equivalent UX: user collapses an expanded core file
-    // by clicking its header, then clicks the finding badge — the badge click
-    // should re-expand the file and scroll.
+    // The core file starts expanded; line 12 (RIGHT:12) carries one finding, so
+    // an in-line badge button is rendered next to that line's code. The badge
+    // shows the reviewer-facing lowercase label ("warning") + an icon.
+    const inlineBadge = screen.getByRole("button", { name: "View warning finding" });
+    expect(inlineBadge).toHaveTextContent("warning");
+    await user.click(inlineBadge);
 
-    renderWithProviders(<SmartDiffViewer smartDiff={SMART_DIFF_BASE} files={PR_FILES} />);
+    expect(onOpenFinding).toHaveBeenCalledWith("find-1");
+  });
 
-    // Step 1: line text is visible (file starts expanded)
-    expect(screen.getByText("added-line-12")).toBeInTheDocument();
+  it("should pick the most-severe finding for the header badge deep-link", async () => {
+    const user = userEvent.setup();
+    const onOpenFinding = vi.fn();
+    const multi: SmartDiff = {
+      ...SMART_DIFF_BASE,
+      groups: SMART_DIFF_BASE.groups.map((g) =>
+        g.role === "core"
+          ? {
+              ...g,
+              files: [
+                {
+                  ...g.files[0]!,
+                  finding_lines: [1, 12],
+                  findings: [
+                    { id: "warn-low", start_line: 1, severity: "WARNING" },
+                    { id: "crit-high", start_line: 12, severity: "CRITICAL" },
+                  ],
+                },
+              ],
+            }
+          : g,
+      ),
+    };
+    renderWithProviders(
+      <SmartDiffViewer smartDiff={multi} files={PR_FILES} onOpenFinding={onOpenFinding} />,
+    );
 
-    // Step 2: collapse the file by clicking its header
-    const filePath = screen.getByText("src/app/feature.ts");
-    await user.click(filePath);
-
-    // Step 3: line text is now hidden
-    expect(screen.queryByText("added-line-12")).not.toBeInTheDocument();
-
-    // Step 4: click the finding badge — should re-expand and scroll
-    const badge = screen.getByRole("button", { name: "1 findings" });
+    // Two findings → badge shows count 2 and links to the CRITICAL one.
+    const badge = screen.getByRole("button", { name: "2 findings" });
     await user.click(badge);
 
-    // Step 5: line text reappears (file is open again)
-    expect(await screen.findByText("added-line-12")).toBeInTheDocument();
-
-    // Step 6: scrollIntoView is eventually called on the anchor
-    await waitFor(() => {
-      expect(scrollIntoViewMock).toHaveBeenCalledWith({
-        behavior: "smooth",
-        block: "center",
-      });
-    });
+    expect(onOpenFinding).toHaveBeenCalledWith("crit-high");
   });
 
   it("should render the SplitBanner with the proposed split name when too_big is true", () => {

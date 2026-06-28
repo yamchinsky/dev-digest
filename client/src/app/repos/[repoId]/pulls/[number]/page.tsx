@@ -49,9 +49,11 @@ function PRDetailPageInner() {
     reviewRunning,
     tab,
     traceRunId,
+    findingId,
     setTab,
     openTrace,
     closeTrace,
+    openFinding,
     cancel,
     deleteRun,
     refetchReviews,
@@ -120,6 +122,7 @@ function PRDetailPageInner() {
             prCommits={pr.commits}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
+            targetFindingId={findingId}
             cancelMutation={cancel}
             onOpenTrace={openTrace}
             onDelete={setPendingDeleteId}
@@ -137,6 +140,7 @@ function PRDetailPageInner() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            onOpenFinding={openFinding}
           />
         )}
       </div>

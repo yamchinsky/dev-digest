@@ -3,22 +3,71 @@
 "use client";
 
 import React from "react";
+import { SEV, Icon, type Severity } from "@devdigest/ui";
 import { commentTargetFor, keysForLine, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { type Line } from "../helpers";
 import { s, lineRowFor, lineSignFor } from "../styles";
 import { CommentThreadView } from "../CommentThreadView";
 import { InlineComposer } from "../InlineComposer";
 
+/** A finding anchored to this line, enough to render + deep-link an in-diff badge. */
+export interface LineFinding {
+  id: string;
+  severity: Severity;
+}
+
+/** Reviewer-facing label per severity (matches the in-diff design: lowercase,
+ *  CRITICAL renders as "blocker"). */
+const INLINE_LABEL: Record<Severity, string> = {
+  CRITICAL: "blocker",
+  WARNING: "warning",
+  SUGGESTION: "suggestion",
+  INFO: "info",
+};
+
+/** A single clickable in-line finding badge: icon + label, severity-tinted. */
+function InlineFindingBadge({
+  finding,
+  onClick,
+}: {
+  finding: LineFinding;
+  onClick?: (findingId: string) => void;
+}) {
+  const sev = SEV[finding.severity];
+  const I = Icon[sev.icon];
+  const label = INLINE_LABEL[finding.severity];
+  return (
+    <button
+      type="button"
+      aria-label={`View ${label} finding`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(finding.id);
+      }}
+      style={cs.lineBadgeBtn(sev.c, sev.bg)}
+    >
+      <I size={12} />
+      {label}
+    </button>
+  );
+}
+
 export function CodeLine({
   ln,
   path,
   threads,
   commenting,
+  findingsOnLine,
+  onFindingClick,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
+  /** Findings whose start_line is this line's new-side number (Smart Diff only). */
+  findingsOnLine?: LineFinding[];
+  /** Navigate to the Findings tab and open the clicked finding's card. */
+  onFindingClick?: (findingId: string) => void;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
@@ -69,6 +118,13 @@ export function CodeLine({
         <span className="mono" style={s.lineText}>
           {ln.text || " "}
         </span>
+        {findingsOnLine && findingsOnLine.length > 0 && (
+          <span style={cs.lineBadges}>
+            {findingsOnLine.map((f) => (
+              <InlineFindingBadge key={f.id} finding={f} onClick={onFindingClick} />
+            ))}
+          </span>
+        )}
       </div>
 
       {commenting &&

@@ -12,6 +12,22 @@ import { SmartDiff } from '@devdigest/shared';
 import { LOCKFILES, SPLIT_TOO_BIG_LINES } from './smart-diff.constants.js';
 import { classifyPath, composeSmartDiff, type PrFileInput, type FindingInput } from './smart-diff.js';
 
+/** Build a FindingInput with stable defaults; tests that care override id/severity. */
+let findingSeq = 0;
+function mkFinding(
+  file: string,
+  start_line: number,
+  overrides: Partial<FindingInput> = {},
+): FindingInput {
+  return {
+    id: overrides.id ?? `finding-${findingSeq++}`,
+    file,
+    start_line,
+    end_line: overrides.end_line ?? null,
+    severity: overrides.severity ?? 'WARNING',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // classifyPath — lockfiles (R1: every entry in LOCKFILES → boilerplate)
 // ---------------------------------------------------------------------------
@@ -315,9 +331,9 @@ describe('composeSmartDiff: finding_lines', () => {
   it('should populate finding_lines with sorted deduped start_lines for matching file', () => {
     const files: PrFileInput[] = [{ path: 'src/service.ts', additions: 10, deletions: 2 }];
     const findings: FindingInput[] = [
-      { file: 'src/service.ts', start_line: 42 },
-      { file: 'src/service.ts', start_line: 10 },
-      { file: 'src/service.ts', start_line: 42 }, // duplicate — should be deduped
+      mkFinding('src/service.ts', 42),
+      mkFinding('src/service.ts', 10),
+      mkFinding('src/service.ts', 42), // duplicate line — deduped in finding_lines
     ];
 
     const result = composeSmartDiff(files, findings);
@@ -332,7 +348,7 @@ describe('composeSmartDiff: finding_lines', () => {
       { path: 'pnpm-lock.yaml', additions: 5, deletions: 5 },
     ];
     const findings: FindingInput[] = [
-      { file: 'src/service.ts', start_line: 15 },
+      mkFinding('src/service.ts', 15),
     ];
 
     const result = composeSmartDiff(files, findings);
@@ -347,8 +363,8 @@ describe('composeSmartDiff: finding_lines', () => {
       { path: 'src/b.ts', additions: 5, deletions: 0 },
     ];
     const findings: FindingInput[] = [
-      { file: 'src/a.ts', start_line: 7 },
-      { file: 'src/b.ts', start_line: 99 },
+      mkFinding('src/a.ts', 7),
+      mkFinding('src/b.ts', 99),
     ];
 
     const result = composeSmartDiff(files, findings);
@@ -363,7 +379,7 @@ describe('composeSmartDiff: finding_lines', () => {
   it('should ignore findings whose file does not match any prFile path', () => {
     const files: PrFileInput[] = [{ path: 'src/service.ts', additions: 5, deletions: 0 }];
     const findings: FindingInput[] = [
-      { file: 'src/other.ts', start_line: 1 }, // different path
+      mkFinding('src/other.ts', 1), // different path
     ];
 
     const result = composeSmartDiff(files, findings);
@@ -380,6 +396,74 @@ describe('composeSmartDiff: finding_lines', () => {
         expect(file.pseudocode_summary).toBeNull();
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// composeSmartDiff — findings (id + severity, for the clickable in-diff badge)
+// ---------------------------------------------------------------------------
+
+describe('composeSmartDiff: findings (id + severity)', () => {
+  it('should carry id + severity per finding for the matching file', () => {
+    const files: PrFileInput[] = [{ path: 'src/service.ts', additions: 10, deletions: 2 }];
+    const findings: FindingInput[] = [
+      mkFinding('src/service.ts', 42, { id: 'f-crit', severity: 'CRITICAL' }),
+      mkFinding('src/service.ts', 10, { id: 'f-warn', severity: 'WARNING' }),
+    ];
+
+    const coreFile = composeSmartDiff(files, findings).groups[0]?.files[0];
+
+    // Sorted by start_line: line 10 (warn) before line 42 (crit).
+    expect(coreFile?.findings).toEqual([
+      { id: 'f-warn', start_line: 10, severity: 'WARNING' },
+      { id: 'f-crit', start_line: 42, severity: 'CRITICAL' },
+    ]);
+  });
+
+  it('should NOT dedupe findings on the same line (unlike finding_lines)', () => {
+    const files: PrFileInput[] = [{ path: 'src/service.ts', additions: 5, deletions: 0 }];
+    const findings: FindingInput[] = [
+      mkFinding('src/service.ts', 12, { id: 'a-second', severity: 'WARNING' }),
+      mkFinding('src/service.ts', 12, { id: 'a-first', severity: 'CRITICAL' }),
+    ];
+
+    const coreFile = composeSmartDiff(files, findings).groups[0]?.files[0];
+
+    // finding_lines dedupes the shared line; findings keeps BOTH, tie-broken by id.
+    expect(coreFile?.finding_lines).toEqual([12]);
+    expect(coreFile?.findings.map((f) => f.id)).toEqual(['a-first', 'a-second']);
+  });
+
+  it('should default findings to [] when a file has none (and pass Zod parse)', () => {
+    const files: PrFileInput[] = [{ path: 'src/service.ts', additions: 5, deletions: 0 }];
+    const result = composeSmartDiff(files, []);
+
+    expect(result.groups[0]?.files[0]?.findings).toEqual([]);
+    // .default([]) on the contract keeps payloads omitting `findings` parseable.
+    const stripped = {
+      ...result,
+      groups: result.groups.map((g) => ({
+        ...g,
+        files: g.files.map(({ findings: _drop, ...rest }) => rest),
+      })),
+    };
+    expect(() => SmartDiff.parse(stripped)).not.toThrow();
+    expect(SmartDiff.parse(stripped).groups[0]?.files[0]?.findings).toEqual([]);
+  });
+
+  it('should not cross-contaminate findings between different files', () => {
+    const files: PrFileInput[] = [
+      { path: 'src/a.ts', additions: 5, deletions: 0 },
+      { path: 'src/b.ts', additions: 5, deletions: 0 },
+    ];
+    const findings: FindingInput[] = [
+      mkFinding('src/a.ts', 7, { id: 'a1' }),
+      mkFinding('src/b.ts', 99, { id: 'b1' }),
+    ];
+
+    const coreFiles = composeSmartDiff(files, findings).groups[0]?.files ?? [];
+    expect(coreFiles.find((f) => f.path === 'src/a.ts')?.findings.map((f) => f.id)).toEqual(['a1']);
+    expect(coreFiles.find((f) => f.path === 'src/b.ts')?.findings.map((f) => f.id)).toEqual(['b1']);
   });
 });
 
@@ -527,8 +611,8 @@ describe('composeSmartDiff: Zod schema conformance', () => {
       { path: 'pnpm-lock.yaml', additions: 1, deletions: 0 },
     ];
     const findings: FindingInput[] = [
-      { file: 'src/service.ts', start_line: 10 },
-      { file: 'src/service.ts', start_line: 30 },
+      mkFinding('src/service.ts', 10),
+      mkFinding('src/service.ts', 30),
     ];
     const result = composeSmartDiff(files, findings);
     expect(() => SmartDiff.parse(result)).not.toThrow();
