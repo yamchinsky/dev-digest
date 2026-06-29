@@ -9,13 +9,14 @@ Several standalone packages (no monorepo workspace — each has its own
 `package.json` and lockfile; cross-package code is shared through tsconfig path
 aliases, not published modules):
 
-| Folder           | Package                     | What it is                                            | Port |
-|------------------|-----------------------------|-------------------------------------------------------|------|
-| `server/`        | `@devdigest/api`            | Fastify API + Drizzle/Postgres (pgvector)             | 3001 |
-| `client/`        | `@devdigest/web`            | Next.js 15 web app (the studio)                       | 3000 |
-| `reviewer-core/` | `@devdigest/reviewer-core`  | Pure review engine: diff → prompt → LLM → findings    | —    |
-| `e2e/`           | `@devdigest/e2e`            | Deterministic browser e2e (agent-browser)             | —    |
-| `server/src/vendor/shared` | `@devdigest/shared` | Zod contracts shared across every package             | —    |
+| Folder           | Package                     | What it is                                            | Port      |
+|------------------|-----------------------------|-------------------------------------------------------|-----------|
+| `server/`        | `@devdigest/api`            | Fastify API + Drizzle/Postgres (pgvector)             | 3001      |
+| `client/`        | `@devdigest/web`            | Next.js 15 web app (the studio)                       | 3000      |
+| `reviewer-core/` | `@devdigest/reviewer-core`  | Pure review engine: diff → prompt → LLM → findings    | —         |
+| `e2e/`           | `@devdigest/e2e`            | Deterministic browser e2e (agent-browser)             | —         |
+| `mcp/`           | `@devdigest/mcp`            | Local stdio MCP adapter over the API (5 tools)        | — (stdio) |
+| `server/src/vendor/shared` | `@devdigest/shared` | Zod contracts shared across every package             | —         |
 
 `repo-intel` (the codebase indexer that powers the **Indexed** badge and feeds
 project context into reviews) lives inside the server at
@@ -82,7 +83,7 @@ These are intentionally **not** in the starter — each lesson adds one back:
 | L01 | Run cost badge · severity filter on findings |
 | L02 | Skills in the product · Conventions extractor |
 | L03 | Intent layer · Smart Diff |
-| L04 | `devdigest-mcp` server · Blast Radius (reads `repo-intel`) |
+| L04 | `devdigest-mcp` server (`mcp/`) · 5 MCP tools: `list_agents`, `run_agent_on_pr`, `get_findings`, `get_conventions`, `get_blast_radius` (stub) |
 | L05 | Project Context Folder · Onboarding generator · PR Brief card |
 | L06 | Eval pipeline · Secret/Phantom gates · Plan Verifier · Export to CI |
 | L07 | Multi-agent review · Run Trace / Live Log · Persistent memory · per-agent stats |

@@ -10,6 +10,11 @@ _None yet._
 
 ## What Doesn't Work
 
+### Smart Diff shows no severity badges when the PR has no findings — not a render bug
+_2026-06-28_ · `GET /pulls/:id/smart-diff`, `src/components/diff-viewer/CodeLine/CodeLine.tsx`
+
+In-diff severity pills only render for findings, and findings only exist after a review run. A freshly-opened PR (or one where no agent has been run) returns `smart-diff` with every file's `findings: []`, so the diff renders with zero badges — which looks identical to "the badge code is broken." When verifying badge/finding UI, FIRST check the data: `curl :3001/pulls/<prId>/smart-diff | jq` and confirm non-empty `findings`, or pick a PR that already has review runs (in the seeded DB, e.g. PR #10 had 8, PR #16 had 0). Don't debug the renderer until you've confirmed findings exist.
+
 ### pnpm 11 crashes in `runDepsStatusCheck` until `allowBuilds` placeholders are filled in `pnpm-workspace.yaml`
 _2026-06-19_ · `client/pnpm-workspace.yaml`, `server/pnpm-workspace.yaml`
 

@@ -10,16 +10,17 @@ suggestions.
 
 ## What this repo is
 
-DevDigest — local-first AI pull-request review. Four standalone packages
+DevDigest — local-first AI pull-request review. Five standalone packages
 (no monorepo workspace, no shared lockfile; cross-package code via tsconfig
 path aliases only):
 
-| Folder           | Package                     | Role                                          | Port |
-|------------------|-----------------------------|-----------------------------------------------|------|
-| `server/`        | `@devdigest/api`            | Fastify 5 + Drizzle/Postgres (pgvector)       | 3001 |
-| `client/`        | `@devdigest/web`            | Next.js 15 studio                             | 3000 |
-| `reviewer-core/` | `@devdigest/reviewer-core`  | Pure review engine (diff → prompt → LLM)      | —    |
-| `e2e/`           | `@devdigest/e2e`            | Deterministic browser flows (agent-browser)   | —    |
+| Folder           | Package                     | Role                                          | Port      |
+|------------------|-----------------------------|-----------------------------------------------|-----------|
+| `server/`        | `@devdigest/api`            | Fastify 5 + Drizzle/Postgres (pgvector)       | 3001      |
+| `client/`        | `@devdigest/web`            | Next.js 15 studio                             | 3000      |
+| `reviewer-core/` | `@devdigest/reviewer-core`  | Pure review engine (diff → prompt → LLM)      | —         |
+| `e2e/`           | `@devdigest/e2e`            | Deterministic browser flows (agent-browser)   | —         |
+| `mcp/`           | `@devdigest/mcp`            | Local stdio MCP adapter over the API          | — (stdio) |
 
 Shared Zod contracts: `server/src/vendor/shared` (`@devdigest/shared`).
 
@@ -71,10 +72,10 @@ Module-level surprises live in `<module>/INSIGHTS.md`.
 
 These bite across modules; surfacing them here avoids repeated grep:
 
-- **No workspace.** `server/`, `client/`, `reviewer-core/`, `e2e/` each have
-  their own `package.json` and lockfile. **Package managers differ**:
-  `server/` and `client/` use **pnpm**; `reviewer-core/` and `e2e/` use
-  **npm**. Don't `pnpm install` inside `reviewer-core/`.
+- **No workspace.** `server/`, `client/`, `reviewer-core/`, `e2e/`, `mcp/`
+  each have their own `package.json` and lockfile. **Package managers differ**:
+  `server/` and `client/` use **pnpm**; `reviewer-core/`, `e2e/`, and `mcp/`
+  use **npm**. Don't `pnpm install` inside `reviewer-core/` or `mcp/`.
 - **Cross-package imports go through tsconfig path aliases**, e.g. the server
   consumes `@devdigest/reviewer-core` → `../reviewer-core/src` as TypeScript
   source. Nothing is published; nothing emits JS for cross-package consumption.
@@ -106,6 +107,7 @@ Lazy-loaded automatically when you work in that directory:
 - `client/AGENTS.md` — TanStack Query as the only fetch path, global error/toast policy, `_components/<Name>/` colocation, vendored UI/contracts, theme + hydration quirks.
 - `reviewer-core/AGENTS.md` — pure engine (no I/O), `src/index.ts` as the public surface, grounding gate, structural INJECTION_GUARD, npm-not-pnpm, build = typecheck.
 - `e2e/AGENTS.md` — JSON-only specs, deterministic locators (no `chat`), hermetic runner, "never `down -v`", read-only seeded fixtures, agent-browser is the framework.
+- `mcp/AGENTS.md` — outbound-adapter boundary (no server internals), stdout = JSON-RPC only, `wrapUntrusted` rule, npm-not-pnpm, build = typecheck, internal layering.
 
 Per-module surprises accumulate in `<module>/INSIGHTS.md` via the
 `engineering-insights` skill (see *Session context* above).

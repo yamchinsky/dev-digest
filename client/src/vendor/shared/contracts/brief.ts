@@ -37,10 +37,28 @@ export const DownstreamImpact = z.object({
 });
 export type DownstreamImpact = z.infer<typeof DownstreamImpact>;
 
+/** Repo-intel index completeness behind a blast result (drives the partial/degraded badge). */
+export const BlastIndexStatus = z.enum(['full', 'partial', 'degraded', 'failed']);
+export type BlastIndexStatus = z.infer<typeof BlastIndexStatus>;
+
+/** A prior PR whose changed files overlap this PR's changed files. */
+export const PriorPr = z.object({
+  number: z.number().int(),
+  title: z.string(),
+  pull_id: z.string(),
+});
+export type PriorPr = z.infer<typeof PriorPr>;
+
 export const BlastRadius = z.object({
   changed_symbols: z.array(ChangedSymbol),
   downstream: z.array(DownstreamImpact),
   summary: z.string(),
+  /** repo-intel index completeness; non-'full' → show a badge, never an empty screen. */
+  status: BlastIndexStatus.default('full'),
+  /** Why the index is degraded/partial, when applicable. */
+  degraded_reason: z.string().nullable().default(null),
+  /** Prior PRs touching the same files (bonus section). */
+  prior_prs: z.array(PriorPr).default([]),
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 
