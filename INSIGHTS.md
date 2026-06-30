@@ -16,7 +16,11 @@ _2026-06-20_ · `.claude/skills/frontend-architecture/`, `.claude/skills/react-b
 The existing `react-best-practices` SKILL.md ends with a 6-line Code Organization section (lines 167-175) — tempting to extend, but doing so hurts triggering: queries like "where do constants go" or "utils vs helpers" should load architecture rules, not React anti-patterns. We split into a third skill `frontend-architecture` (v0.1.0) that covers both Vite React and Next.js App Router folder structure; non-overlap with `react-best-practices` (patterns) and `next-best-practices` (RSC/runtime) is documented in `frontend-architecture/README.md` under "Relationship to other skills". Before extending Code Organization in `react-best-practices`, check whether the addition is about *where files live* (belongs in `frontend-architecture`) or about *how components are written* (stays in `react-best-practices`).
 
 ## What Doesn't Work
-_None yet._
+
+### Commit messages and PR bodies go in English, not the session's Ukrainian reply language
+_2026-06-30_ · `.claude/agents/*.md`, `docs/plans/agent-skill-fleet.md:109,228` (repo-wide)
+
+The repo convention is "report/artifacts in **English**, address the user in **Ukrainian**" — but it lives only in agent/skill *Language* footers (e.g. `architecture-reviewer.md:243`, `researcher.md:74`, `doc-writer`/`plan-verifier`/`implementer`/`test-writer` SKILL.md) and the `agent-skill-fleet` plan (lines 109, 228), **not** in any `CLAUDE.md` or contributing guide. So a session running with a "respond in Ukrainian" language setting will wrongly carry it into commit messages and PR bodies (all repo history is English conventional commits). When authoring git/gh artifacts, default to **English** regardless of the chat reply language; reserve Ukrainian for addressing the user in chat. Hit this session: PR #19 body was first written in Ukrainian while its commits were English, then rewritten to English.
 
 ## Codebase Patterns
 _None yet._
