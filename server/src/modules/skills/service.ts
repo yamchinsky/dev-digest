@@ -1,4 +1,3 @@
-import { eq } from 'drizzle-orm';
 import type { Container } from '../../platform/container.js';
 import type {
   ImportCommitBody,
@@ -10,7 +9,6 @@ import type {
   SkillType,
   SkillVersion,
 } from '@devdigest/shared';
-import * as t from '../../db/schema.js';
 import { SkillsRepository } from './repository.js';
 import { toSkillDto } from './helpers.js';
 import { previewImport, ImportError } from './import.js';
@@ -191,10 +189,7 @@ export class SkillsService {
     if (!skill) throw new NotFoundError('Skill not found');
 
     // (2) Fetch all repos for the workspace (single query, then pass to discovery).
-    const repos = await this.container.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(eq(t.repos.workspaceId, workspaceId));
+    const repos = await this.repo.getReposForWorkspace(workspaceId);
 
     // (3) Discover valid context docs from disk (pure FS utility, no DB/LLM).
     const repoInputs = repos.map((r) => ({ repoId: r.id, clonePath: r.clonePath }));

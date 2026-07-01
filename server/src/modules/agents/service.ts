@@ -1,4 +1,3 @@
-import { eq } from 'drizzle-orm';
 import type { Container } from '../../platform/container.js';
 import type {
   Agent,
@@ -11,7 +10,6 @@ import type {
   ReviewStrategy,
 } from '@devdigest/shared';
 import { ValidationError } from '../../platform/errors.js';
-import * as t from '../../db/schema.js';
 import { discoverContextDocs } from '../workspace/discovery.js';
 import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
@@ -222,10 +220,7 @@ export class AgentsService {
     if (!agent) return undefined;
 
     // 2. Repos for this workspace (id + clone_path for discovery)
-    const repos = await this.container.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(eq(t.repos.workspaceId, workspaceId));
+    const repos = await this.repo.getReposForWorkspace(workspaceId);
 
     // 3. Discover valid context docs via filesystem utility (not WorkspaceService —
     //    avoids cross-service imports and circular dependency risk)

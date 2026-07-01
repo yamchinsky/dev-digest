@@ -194,6 +194,14 @@ export class SkillsRepository {
       .onConflictDoNothing();
   }
 
+  /** Repos for a workspace — id + clone_path projection used for context-doc discovery. */
+  async getReposForWorkspace(workspaceId: string): Promise<Array<{ id: string; clonePath: string | null }>> {
+    return this.db
+      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
+      .from(t.repos)
+      .where(eq(t.repos.workspaceId, workspaceId));
+  }
+
   // ---- skill_context_docs (unordered, no `order` column) --------------------
 
   /** All context docs attached to a skill (unordered). */
