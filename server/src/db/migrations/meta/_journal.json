@@ -78,6 +78,13 @@
       "when": 1782033328298,
       "tag": "0010_calm_scream",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782944778839,
+      "tag": "0011_tan_stick",
+      "breakpoints": true
     }
   ]
 }

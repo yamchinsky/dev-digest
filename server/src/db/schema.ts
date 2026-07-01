@@ -31,8 +31,8 @@ import { users, workspaces, workspaceMembers, settings } from './schema/core';
 import { repos } from './schema/repos';
 import { pullRequests, prFiles, prCommits } from './schema/pulls';
 import { reviews, findings, prIntent, prBrief } from './schema/reviews';
-import { skills, skillVersions } from './schema/skills';
-import { agents, agentVersions, agentSkills } from './schema/agents';
+import { skills, skillVersions, skillContextDocs } from './schema/skills';
+import { agents, agentVersions, agentSkills, agentContextDocs } from './schema/agents';
 import { memory } from './schema/knowledge';
 import { conventions } from './schema/conventions';
 import { codeChunks, symbols, references, onboarding } from './schema/context';
@@ -64,9 +64,11 @@ export const schema = {
   prBrief,
   skills,
   skillVersions,
+  skillContextDocs,
   agents,
   agentVersions,
   agentSkills,
+  agentContextDocs,
   conventions,
   memory,
   codeChunks,
