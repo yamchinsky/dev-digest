@@ -46,6 +46,7 @@
     "tabs": {
       "config": "Config",
       "skills": "Skills",
+      "context": "Context",
       "evals": "Evals",
       "stats": "Stats",
       "ci": "CI"
@@ -94,6 +95,18 @@
     "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Drag to reorder.",
     "empty": "No skills in this workspace yet. Add one in the Skills Lab.",
     "addCta": "Add a skill"
+  },
+  "context": {
+    "title": "Context Docs",
+    "attachedCount": "{attached} of {total} attached",
+    "orderHint": "Order matters — earlier docs appear earlier in the assembled prompt. Drag to reorder.",
+    "empty": "No context docs found in this workspace. Add .md files to your repos under specs/, docs/, or insights/ folders.",
+    "loadError": "Could not load context docs.",
+    "previewShow": "Preview",
+    "previewHide": "Hide",
+    "tokenFooterLabel": "## Project context",
+    "tokenUnit": "tokens",
+    "saveFailed": "Could not save context doc changes."
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."
