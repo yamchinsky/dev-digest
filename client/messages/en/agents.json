@@ -104,6 +104,7 @@
     "loadError": "Could not load context docs.",
     "previewShow": "Preview",
     "previewHide": "Hide",
+    "dragToReorder": "Drag to reorder",
     "tokenFooterLabel": "## Project context",
     "tokenUnit": "tokens",
     "saveFailed": "Could not save context doc changes."

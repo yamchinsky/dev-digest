@@ -22,6 +22,11 @@ _2026-06-30_ · `.claude/agents/*.md`, `docs/plans/agent-skill-fleet.md:109,228`
 
 The repo convention is "report/artifacts in **English**, address the user in **Ukrainian**" — but it lives only in agent/skill *Language* footers (e.g. `architecture-reviewer.md:243`, `researcher.md:74`, `doc-writer`/`plan-verifier`/`implementer`/`test-writer` SKILL.md) and the `agent-skill-fleet` plan (lines 109, 228), **not** in any `CLAUDE.md` or contributing guide. So a session running with a "respond in Ukrainian" language setting will wrongly carry it into commit messages and PR bodies (all repo history is English conventional commits). When authoring git/gh artifacts, default to **English** regardless of the chat reply language; reserve Ukrainian for addressing the user in chat. Hit this session: PR #19 body was first written in Ukrainian while its commits were English, then rewritten to English.
 
+### The `gh pr create` hook fails open on prefixed commands (`cd X && gh pr create …`)
+_2026-07-02_ · `.claude/settings.json` (PreToolUse `"if": "Bash(gh pr create*)"`)
+
+The PreToolUse matcher `Bash(gh pr create*)` anchors at the start of the command string, so any prefix — `cd /path && gh pr create`, env assignment, subshell — slips past the gate and the PR opens unreviewed (bit us on PR #20). Same fails-open family as the routing-bucket entry below. Fix direction: change the matcher to a substring/regex form that catches `gh pr create` anywhere in the command (or have the hook script itself grep the full command), and until then run pr-self-review manually when opening PRs from scripts/compound commands.
+
 ### pr-self-review fails open: a diff file matching no routing.md bucket is never reviewed
 _2026-07-02_ · `.claude/skills/pr-self-review/SKILL.md:64-67`, `.claude/skills/pr-self-review/routing.md`
 

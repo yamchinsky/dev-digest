@@ -204,11 +204,10 @@ export class SkillsService {
     // (5) Validate ALL items before touching the DB — no partial persistence.
     for (const item of items) {
       if (!validSet.has(`${item.repo_id}:${item.path}`)) {
-        throw new AppError(
-          'INVALID_CONTEXT_DOC_PATH',
-          'One or more paths are not in the discovered set',
-          400,
-        );
+        throw new ValidationError('One or more context doc paths are not valid for this workspace', {
+          code: 'INVALID_CONTEXT_DOC_PATH',
+          path: `${item.repo_id}:${item.path}`,
+        });
       }
     }
 

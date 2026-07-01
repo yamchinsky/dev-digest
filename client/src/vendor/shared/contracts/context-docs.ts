@@ -27,8 +27,8 @@ export const SkillContextDoc = z.object({
 export type SkillContextDoc = z.infer<typeof SkillContextDoc>;
 
 export const PutContextDocsBody = z.object({
-  items: z.array(
-    z.object({ path: z.string().min(1), repo_id: z.string().uuid() }),
-  ),
+  items: z
+    .array(z.object({ path: z.string().min(1).max(1024), repo_id: z.string().uuid() }))
+    .max(500),
 });
 export type PutContextDocsBody = z.infer<typeof PutContextDocsBody>;

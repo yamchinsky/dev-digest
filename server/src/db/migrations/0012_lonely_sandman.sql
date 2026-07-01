@@ -1,0 +1,1 @@
+CREATE INDEX "skill_context_docs_repo_path_idx" ON "skill_context_docs" USING btree ("repo_id","relative_path");

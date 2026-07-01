@@ -138,7 +138,7 @@ function SortableDocRow({
           }}
           {...(draggable ? attributes : {})}
           {...(draggable ? listeners : {})}
-          aria-label="Drag to reorder"
+          aria-label={t("context.dragToReorder")}
         >
           <Icon.Menu size={14} />
         </span>
