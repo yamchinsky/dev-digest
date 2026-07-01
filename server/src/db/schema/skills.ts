@@ -44,5 +44,7 @@ export const skillContextDocs = pgTable(
   (t) => ({
     pk: primaryKey({ columns: [t.skillId, t.repoId, t.relativePath] }),
     skillIdx: index('skill_context_docs_skill_idx').on(t.skillId),
+    // Covers the ON DELETE CASCADE from repos — mirrors agent_context_docs.
+    repoPathIdx: index('skill_context_docs_repo_path_idx').on(t.repoId, t.relativePath),
   }),
 );
