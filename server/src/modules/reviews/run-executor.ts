@@ -1,14 +1,12 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { inArray } from 'drizzle-orm';
 import type { Container } from '../../platform/container.js';
 import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
-import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
-import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
+import type { ReviewRepository, FindingRow, PullRow, ReviewRow, RepoRow } from './repository.js';
 import { SkillsRepository } from '../skills/repository.js';
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
@@ -65,7 +63,7 @@ export class ReviewRunExecutor {
   async executeRuns(
     workspaceId: string,
     pull: PullRow,
-    repo: typeof schema.repos.$inferSelect,
+    repo: RepoRow,
     jobs: { agent: AgentRow; runId: string }[],
     logger?: Logger,
   ): Promise<void> {
@@ -188,7 +186,7 @@ export class ReviewRunExecutor {
   private async runOneAgent(
     workspaceId: string,
     pull: PullRow,
-    repo: typeof schema.repos.$inferSelect,
+    repo: RepoRow,
     diff: UnifiedDiff,
     agent: AgentRow,
     runId: string,
@@ -285,10 +283,7 @@ export class ReviewRunExecutor {
       if (mergedDocs.length > 0) {
         // 4. Batch-fetch clone paths: ONE query for all unique repoIds (not per-doc).
         const uniqueRepoIds = [...new Set(mergedDocs.map((d) => d.repoId))];
-        const repoRows = await this.container.db
-          .select({ id: schema.repos.id, clonePath: schema.repos.clonePath })
-          .from(schema.repos)
-          .where(inArray(schema.repos.id, uniqueRepoIds));
+        const repoRows = await this.repo.getClonePathsByIds(uniqueRepoIds);
         const clonePathById = new Map(repoRows.map((r) => [r.id, r.clonePath]));
 
         // 5. Read files in merge order; gracefully handle missing and empty cases.

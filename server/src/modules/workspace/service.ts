@@ -1,10 +1,8 @@
 import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { and, eq } from 'drizzle-orm';
 import type { Container } from '../../platform/container.js';
 import type { ContextDoc } from '@devdigest/shared';
 import { NotFoundError } from '../../platform/errors.js';
-import * as t from '../../db/schema.js';
 import { discoverContextDocs } from './discovery.js';
 import { WorkspaceRepository } from './repository.js';
 
@@ -24,10 +22,7 @@ export class WorkspaceService {
 
   /** List all discovered context docs for the entire workspace. */
   async listForWorkspace(workspaceId: string): Promise<ContextDoc[]> {
-    const repos = await this.container.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(eq(t.repos.workspaceId, workspaceId));
+    const repos = await this.repo.listReposForWorkspace(workspaceId);
 
     const repoInputs = repos.map((r) => ({ repoId: r.id, clonePath: r.clonePath }));
     const discovered = await discoverContextDocs(repoInputs);
@@ -49,10 +44,7 @@ export class WorkspaceService {
    * Throws NotFoundError when the repo doesn't belong to this workspace.
    */
   async listForRepo(workspaceId: string, repoId: string): Promise<ContextDoc[]> {
-    const [repo] = await this.container.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, repoId)));
+    const repo = await this.repo.getRepoByIdForWorkspace(workspaceId, repoId);
 
     if (!repo) throw new NotFoundError('Repo not found');
 
@@ -83,10 +75,7 @@ export class WorkspaceService {
     relativePath: string,
   ): Promise<{ content: string }> {
     // (1) Verify the repo belongs to this workspace
-    const [repo] = await this.container.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, repoId)));
+    const repo = await this.repo.getRepoByIdForWorkspace(workspaceId, repoId);
 
     if (!repo) throw new NotFoundError('Repo not found');
 
