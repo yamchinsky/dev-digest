@@ -56,8 +56,22 @@ move when adding a new outbound integration is the wrong one. Declare new
 port interfaces in shared from the start, even if `reviewer-core` doesn't
 consume them yet.
 
+### Replace-style writes need `db.transaction()` — `setSkills` predates this and is silently non-atomic
+_2026-07-02_ · `server/src/modules/agents/repository.ts` (`replaceContextDocs` vs `setSkills`)
+
+The delete-then-bulk-insert "replace" pattern must run inside one `db.transaction()` — `replaceContextDocs` (context docs) does this and is the first `db.transaction()` use in any repository. The older `setSkills` does two bare awaits (DELETE, then INSERT): a crash between them leaves the agent with zero skills. When touching `setSkills` next, wrap it in a transaction; when adding any new replace-style method, copy `replaceContextDocs`, not `setSkills`.
+
 ## Tool & Library Notes
-_None yet._
+
+### `fs.promises.glob` returns an AsyncIterator, warns "experimental", and does not follow symlinks
+_2026-07-02_ · `server/src/modules/workspace/discovery.ts`
+
+Node's native glob (22+, still experimental in 23.x) is NOT `Promise<string[]>` — iterate with `for await…of`. It emits an `ExperimentalWarning` at runtime (harmless, appears in test output). Brace expansion `{a,b,c}` works; paths come back with forward slashes. Crucially it does **not** follow symlinks by default — for scanning untrusted repo clones this is the correct security default and is deliberately paired with a post-glob `path.resolve`-containment guard (two independent barriers). Do not "fix" either barrier or add `followSymlinks: true`.
+
+### Drizzle `inArray([])` generates invalid SQL — guard the empty array
+_2026-07-02_ · `server/src/modules/repos/repository.ts` (`getClonePathsByIds`)
+
+`inArray(col, [])` emits `WHERE id IN ()`, which PostgreSQL rejects at runtime (typecheck won't catch it). Every batch-lookup repository method must early-return on an empty id list: `if (ids.length === 0) return [];`. Easy to drop when copying the batch pattern to a new method.
 
 ## Recurring Errors & Fixes
 
