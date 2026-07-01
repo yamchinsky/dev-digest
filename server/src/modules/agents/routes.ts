@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
+import { CiFailOn, Provider, PutContextDocsBody, ReviewStrategy } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -191,4 +191,22 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
       enabled: agent.enabled,
     };
   });
+
+  app.get('/agents/:id/context-docs', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const docs = await service.getContextDocs(workspaceId, req.params.id);
+    if (!docs) throw new NotFoundError('Agent not found');
+    return docs;
+  });
+
+  app.put(
+    '/agents/:id/context-docs',
+    { schema: { params: IdParams, body: PutContextDocsBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const docs = await service.replaceContextDocs(workspaceId, req.params.id, req.body.items);
+      if (!docs) throw new NotFoundError('Agent not found');
+      return docs;
+    },
+  );
 }

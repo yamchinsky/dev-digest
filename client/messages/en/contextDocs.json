@@ -1,0 +1,22 @@
+{
+  "title": "Project Context",
+  "list": {
+    "heading": "Context Docs",
+    "empty": {
+      "title": "No context docs found",
+      "body": "Add specs, docs, or INSIGHTS.md files to your repos to see them here."
+    },
+    "badge": {
+      "specs": "specs",
+      "docs": "docs",
+      "insights": "insights"
+    },
+    "usedBy": "Used by {count, plural, one {# agent} other {# agents}}"
+  },
+  "preview": {
+    "placeholder": {
+      "title": "Select a doc",
+      "body": "Pick a file on the left to preview its content."
+    }
+  }
+}
