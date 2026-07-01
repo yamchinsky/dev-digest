@@ -34,6 +34,21 @@ _2026-06-28_ · `src/vendor/ui/primitives/Badge.tsx:80`, `src/components/diff-vi
 
 `SeverityBadge` renders `{compact ? null : s.label}` — so `compact` shows just the severity icon, no word. Reaching for it to make an in-diff finding badge produced a badge so small it read as "no badge at all" against the code (the in-diff design wants a visible `icon + lowercase label` pill: blocker / warning / suggestion). When you need a labelled severity pill in a tight row, don't pass `compact`; build a small pill from the `SEV[severity]` tokens (`.c`, `.bg`, `.icon`) and your own label map — note the design uses **"blocker"** for `CRITICAL`, not `SEV.CRITICAL.label` ("Critical").
 
+### i18n namespaces are auto-discovered from `messages/<locale>/*.json` — there is no registry
+_2026-07-02_ · `client/src/i18n/request.ts` (`loadMessages`)
+
+`loadMessages()` scans the locale directory at request time and uses each filename (minus `.json`) as the namespace key. Adding a new namespace (`contextDocs.json`) requires ZERO code changes — no import, no provider edit, no layout change. Non-obvious because `NextIntlClientProvider` receives one merged object and nothing in the code lists the namespaces explicitly. Corollary: a filename typo silently creates a differently-named namespace.
+
+### `vendor/shared` barrels use `.js` import suffixes — a scoped exception to the client's extensionless rule
+_2026-07-02_ · `client/src/vendor/shared/index.ts`
+
+The client convention is extensionless internal imports, but the dual-vendored `vendor/shared` barrels deliberately use `export * from './contracts/x.js'` so the files stay byte-identical with the server copy (which requires `.js` under ESM). Next.js resolves this fine. When adding a contract, keep the `.js` suffix inside `vendor/shared` and stay extensionless everywhere else.
+
+### Prompt-format literals in UI must NOT be i18n-wrapped
+_2026-07-02_ · `client/src/app/skills/_components/SkillEditor/SkillEditor.tsx` (SERIALIZES AS block)
+
+Strings that mirror what the LLM actually receives (e.g. the `## Project context` heading in the skill editor's SERIALIZES AS preview) are prompt-format constants, not UI copy — wrapping them in `t()` would let locales corrupt the depicted prompt slot. Only the surrounding labels ("SERIALIZES AS", captions) are translatable. When previewing prompt fragments in UI, keep the fragment verbatim and translate around it.
+
 ## Tool & Library Notes
 
 ### A `<button>` whose only child is an icon-only `SeverityBadge` is invisible to `getByRole("button", { name })`

@@ -1,4 +1,4 @@
-# Spec: Project Context Folder  |  Spec ID: SPEC-01  |  Status: approved
+# Spec: Project Context Folder  |  Spec ID: SPEC-01  |  Status: implemented
 Supersedes: —
 Modules: server, client, shared
 
