@@ -2,7 +2,7 @@
 name: plan-verifier
 description: >
   Use to verify that an implemented change satisfies every requirement and
-  acceptance criterion of a Development Plan in `docs/plans/<feature>.md`.
+  acceptance criterion of an Implementation Plan in `docs/plans/<feature>.md`.
   Trigger phrases: 'verify the plan', 'did we cover all requirements',
   'requirement coverage', 'check plan against code'.
   Read-only; complements pr-self-review (quality) and architecture-reviewer
@@ -12,7 +12,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 # plan-verifier
 
-Requirement-coverage checker for DevDigest Development Plans. Given a
+Requirement-coverage checker for DevDigest Implementation Plans. Given a
 `docs/plans/<feature>.md` and the implemented code in the tree, it maps
 every Requirement ID and measurable acceptance criterion to **concrete
 evidence** (file:line, test name, route, migration, schema field) and
@@ -49,15 +49,24 @@ The skill requires two things:
 
 Parse the plan for:
 
+- **`Spec:` header** (newer plans) — when it names a `SPEC-NN`, read that
+  spec file too: its AC-IDs feed the Spec cross-check (§2b).
 - **Requirements table** — columns `ID | Requirement | Acceptance criteria
-  (measurable)`. Each row yields one or more verifiable sub-criteria.
+  (measurable)`, with an optional `Covers AC` column in spec-traced plans.
+  Both shapes MUST parse — older plans have no `Covers AC` column and no
+  `Spec:` header; treat those as spec-less.
+- **`### Descoped ACs`** (optional) — spec ACs deliberately out of scope,
+  each with a reason.
 - **Tasks section** — `### T<N> — … · Owned paths` and `Acceptance` lines.
   Owned paths tell you exactly which files each task should have created
   or modified.
+- **`## Test intents`** (optional) — the plan's statement of what must be
+  tested; used when judging test-evidence sub-criteria.
 
 Both the Requirements table and the Tasks section are the authoritative
 checklist. If the plan uses the standard planner output contract (see
-`planner.md`), these two structures will always be present.
+`.claude/agents/implementation-planner.md`), these two structures will always
+be present.
 
 ## 2. Traceability procedure
 
@@ -90,6 +99,23 @@ Use `typescript-expert` as a supporting lens when a criterion requires
 judging whether a TypeScript type, interface, or Zod schema is correctly
 declared — but only to read and interpret, never to run `tsc`.
 
+## 2b. Spec cross-check (when the plan names a spec)
+
+The coverage matrix is only as good as the plan's R-ID set. When the plan
+carries `Spec: SPEC-NN`, close the loop against the spec itself:
+
+1. Extract every `AC-n` from the spec.
+2. Each AC must either appear in some requirement row's `Covers AC` **or** be
+   listed under `### Descoped ACs` with a reason.
+3. An AC that is neither mapped nor descoped is a **plan-level gap**: report
+   it in a dedicated `## Spec cross-check` section (`AC-n — UNMAPPED`) and
+   count it toward the GAPS FOUND verdict. This is the silent-failure mode
+   this section exists to catch — a plan that dropped a spec AC would
+   otherwise verify as ALL COVERED.
+
+No spec header → skip this section and note `Spec cross-check: n/a (no spec
+referenced)` in the report.
+
 ## 3. Status rubric
 
 Assign exactly one status per criterion:
@@ -99,10 +125,21 @@ Assign exactly one status per criterion:
 | **COVERED** | All verifiable sub-criteria have concrete `path:line` (or equivalent) evidence. |
 | **PARTIAL** | Some sub-criteria are evidenced; at least one is not found or incomplete. State which sub-criteria are missing. |
 | **MISSING** | No evidence found for the criterion. Distinguish: "not implemented" (owned paths exist but lack the feature) from "could not locate" (owned paths themselves are absent or the search was inconclusive). |
+| **DEFERRED** | Pre-tests mode only (see below): the sub-criterion's only possible evidence is a test that has not been authored yet. Not a gap; re-checked after test-writer runs. |
 
 A criterion that is structurally impossible to search (e.g. "works under
 load") → mark PARTIAL with a note: *"runtime assertion; static evidence
 not available."*
+
+**Pre-tests mode.** The `impl` skill invokes this skill **before** any test
+authoring (coverage first). When the caller states tests are not written
+yet, mark test-evidence sub-criteria (`suite green`, `a test exercises X`)
+as `DEFERRED (test evidence pending)` instead of MISSING — otherwise every
+pre-tests run reports false gaps and trains the caller to ignore the verdict.
+While the `test-writer` agent is disabled, DEFERRED rows may never resolve
+in-run — the caller routes them to its manual checklist; they still never
+count as gaps. A **re-check run** re-examines ONLY the DEFERRED and
+previously non-COVERED rows; never re-verify rows already COVERED.
 
 ## 4. Complementarity — coverage, not quality
 
@@ -129,7 +166,9 @@ Produce the report in this exact structure:
 # Plan coverage: <feature>
 
 **Plan file:** `docs/plans/<feature>.md`
-**Verdict:** ALL COVERED | GAPS FOUND (N partial, M missing)
+**Spec cross-check:** OK | n/a (no spec referenced) | N unmapped ACs
+**Verdict:** ALL COVERED | GAPS FOUND (N partial, M missing) [· K deferred —
+not gaps, pre-tests mode]
 
 ## Coverage matrix
 
@@ -192,12 +231,16 @@ whether to open a follow-up implementer task or accept the gap.
 6. **No fixes.** Report gaps; do not suggest implementation paths.
 7. **One plan per invocation.** If the user names multiple plans, ask
    which one to verify first; do not merge two plans' matrices.
+8. **Spec cross-check is mandatory when the plan names a spec.** An AC that
+   is neither mapped in `Covers AC` nor listed under Descoped ACs counts
+   toward GAPS FOUND. DEFERRED rows never do — they are pre-tests
+   placeholders, re-checked later.
 
 ## Based on
 
 Sources that shaped this skill's traceability rationale and procedure:
 
-- `.claude/agents/planner.md` — the Requirements table (ID + measurable
+- `.claude/agents/implementation-planner.md` — the Requirements table (ID + measurable
   acceptance criteria) and Tasks (Owned paths + Acceptance) are the exact
   structures this skill parses as its input contract.
 - Plan-Verifier findings from the `agent-skill-fleet` plan

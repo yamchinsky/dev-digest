@@ -60,6 +60,12 @@ mixed in the same file.
 
 ## 2. Test-PLAN first (do this before writing)
 
+0. **When the invocation carries a plan's `## Test intents` and/or a spec's
+   per-AC verification hints** (the `impl` skill passes both), treat them
+   as the primary scenario checklist: map every intent to at least one test
+   or an explicitly skipped scenario with a reason, then derive additional
+   scenarios on top. Intents with surface `e2e` or `manual` are out of your
+   scope — list them under deliberately skipped.
 1. Read the component or module under test. List every meaningful scenario:
    - **Happy paths** — the normal user flow works end-to-end.
    - **Edge cases** — empty state, max-length input, zero results, boundary
@@ -244,6 +250,8 @@ and leave a clear comment in the test file.
 Report after every run:
 
 - **Test files written** — exact absolute paths.
+- **Intent mapping** — when `## Test intents` / spec hints were provided:
+  each intent → the covering test name(s), or the reason it was skipped.
 - **Scenarios covered** — bullet list of test names (`should X when Y`).
 - **Scenarios deliberately skipped** — each with a one-line reason (e.g. "covered
   by e2e/", "requires manual testing", "out of scope for this surface").

@@ -15,8 +15,10 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [zod](zod/SKILL.md) | Full-stack | Zod schema validation, parsing, error handling, type inference |
 | [typescript-expert](typescript-expert/SKILL.md) | Full-stack | Type-level programming, performance, tooling, migrations |
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
-| [pr-self-review](pr-self-review/SKILL.md) | Workflow | Pre-PR gate: routes diff through per-bucket skills, blocks `gh pr create`/`git push` on any CRITICAL |
-| [plan-verifier](plan-verifier/SKILL.md) | Workflow | Requirement-coverage checker: maps every R-ID and acceptance criterion in a `docs/plans/<feature>.md` to concrete evidence (file:line / test / migration); emits a coverage matrix with COVERED/PARTIAL/MISSING verdict |
+| [pr-self-review](pr-self-review/SKILL.md) | Workflow | Pre-PR gate: routes diff through per-bucket skills, blocks `gh pr create` on any CRITICAL (plain `git push` flows freely) |
+| [plan-verifier](plan-verifier/SKILL.md) | Workflow | Requirement-coverage checker: maps every R-ID and acceptance criterion in a `docs/plans/<feature>.md` to concrete evidence (file:line / test / migration); emits a coverage matrix (COVERED/PARTIAL/MISSING, plus DEFERRED in pre-tests mode) and cross-checks spec ACs when the plan names a SPEC-NN |
+| [impl](impl/SKILL.md) | Workflow | SDD execution orchestrator (`/impl`): runs an Implementation Plan end-to-end — feature branch → implementer waves per DAG (cap 3) → plan-verifier coverage gate (first, sonnet subagent) → capped gap-fix loop → architecture-reviewer + arch-fix loop (≤3, to APPROVE) → spec status flip → `gh pr create`. Specs and plans are authored manually upstream |
+| [workflow-retro](workflow-retro/SKILL.md) | Workflow | Manual retrospective of a multi-agent run: token / tool-call / duration / parallelism metrics incl. nested subagents (deep mode reads journals from disk — parent usage undercounts), insights + concrete recommendations, trend row appended to `docs/retros/ledger.md` |
 | [doc-writer](doc-writer/SKILL.md) | Workflow | Documentation authoring: picks the correct Diátaxis type, places docs in the right repo location, embeds Mermaid diagrams with captions |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 
