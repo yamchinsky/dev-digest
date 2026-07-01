@@ -9,6 +9,7 @@ import { Tabs } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
 import { ConfigTab } from "./_components/ConfigTab";
 import { SkillsTab } from "./_components/SkillsTab";
+import { ContextTab } from "./_components/ContextTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
 
@@ -23,7 +24,13 @@ export function AgentEditor({ agent, tab, onTab }: { agent: Agent; tab: string; 
       <div style={s.body}>
         {/* key={agent.id} → React unmounts/remounts on agent switch, so
            tab components can initialize state directly from props (no useEffect-reset). */}
-        {tab === "skills" ? <SkillsTab key={agent.id} agent={agent} /> : <ConfigTab key={agent.id} agent={agent} />}
+        {tab === "skills" ? (
+          <SkillsTab key={agent.id} agent={agent} />
+        ) : tab === "context" ? (
+          <ContextTab key={agent.id} agent={agent} />
+        ) : (
+          <ConfigTab key={agent.id} agent={agent} />
+        )}
       </div>
     </div>
   );

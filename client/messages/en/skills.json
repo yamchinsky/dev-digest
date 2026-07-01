@@ -97,5 +97,12 @@
     "bodyLabel": "Skill body (Markdown)",
     "bodyHint": "Saving a changed body creates a new immutable version.",
     "version": "v{version}"
+  },
+  "contextSection": {
+    "heading": "Context docs",
+    "nAttached": "{count} attached",
+    "filterPlaceholder": "Filter by path…",
+    "empty": "No docs found in this workspace.",
+    "serializesAs": "SERIALIZES AS"
   }
 }
