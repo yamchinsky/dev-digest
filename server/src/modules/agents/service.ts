@@ -12,6 +12,7 @@ import type {
 import { ValidationError } from '../../platform/errors.js';
 import { discoverContextDocs } from '../workspace/discovery.js';
 import { AgentsRepository } from './repository.js';
+import { RepoRepository } from '../repos/repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
 
 /**
@@ -53,9 +54,11 @@ export interface UpdateAgentInput {
 
 export class AgentsService {
   private repo: AgentsRepository;
+  private repoRepo: RepoRepository;
 
   constructor(private container: Container) {
     this.repo = new AgentsRepository(container.db);
+    this.repoRepo = new RepoRepository(container.db);
   }
 
   async list(workspaceId: string): Promise<Agent[]> {
@@ -220,7 +223,7 @@ export class AgentsService {
     if (!agent) return undefined;
 
     // 2. Repos for this workspace (id + clone_path for discovery)
-    const repos = await this.repo.getReposForWorkspace(workspaceId);
+    const repos = await this.repoRepo.list(workspaceId);
 
     // 3. Discover valid context docs via filesystem utility (not WorkspaceService —
     //    avoids cross-service imports and circular dependency risk)

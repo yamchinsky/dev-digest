@@ -10,6 +10,7 @@ import type {
   SkillVersion,
 } from '@devdigest/shared';
 import { SkillsRepository } from './repository.js';
+import { RepoRepository } from '../repos/repository.js';
 import { toSkillDto } from './helpers.js';
 import { previewImport, ImportError } from './import.js';
 import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
@@ -48,9 +49,11 @@ export interface ImportPreviewInput {
 
 export class SkillsService {
   private repo: SkillsRepository;
+  private repoRepo: RepoRepository;
 
   constructor(private container: Container) {
     this.repo = new SkillsRepository(container.db);
+    this.repoRepo = new RepoRepository(container.db);
   }
 
   async list(workspaceId: string, filter: { type?: SkillType; enabled?: boolean; q?: string } = {}): Promise<Skill[]> {
@@ -189,7 +192,7 @@ export class SkillsService {
     if (!skill) throw new NotFoundError('Skill not found');
 
     // (2) Fetch all repos for the workspace (single query, then pass to discovery).
-    const repos = await this.repo.getReposForWorkspace(workspaceId);
+    const repos = await this.repoRepo.list(workspaceId);
 
     // (3) Discover valid context docs from disk (pure FS utility, no DB/LLM).
     const repoInputs = repos.map((r) => ({ repoId: r.id, clonePath: r.clonePath }));

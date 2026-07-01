@@ -226,14 +226,6 @@ export class AgentsRepository {
    * order = index. Used by the "Skills" editor tab (attach/reorder). Skills not in
    * the list are unlinked.
    */
-  /** Repos for a workspace — id + clone_path projection used for context-doc discovery. */
-  async getReposForWorkspace(workspaceId: string): Promise<Array<{ id: string; clonePath: string | null }>> {
-    return this.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(eq(t.repos.workspaceId, workspaceId));
-  }
-
   async setSkills(agentId: string, skillIds: string[]): Promise<void> {
     await this.db.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
     if (skillIds.length === 0) return;
