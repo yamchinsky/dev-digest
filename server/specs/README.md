@@ -9,3 +9,10 @@ Module-owned contracts and fixtures:
 
 Code-defined contracts (`@devdigest/shared`, route zod schemas) stay in code;
 this folder is the human-readable mirror + rationale.
+
+Also home to **single-module SDD feature specs** (`SPEC-NN-*.md`) written by
+the `spec-creator` skill; cross-module specs live in repo-root `specs/`.
+
+## Spec index
+
+<!-- one line per spec, appended by spec-creator -->

@@ -7,12 +7,11 @@ description: >
   structured findings grouped by severity (CRITICAL / WARNING / SUGGESTION)
   with an APPROVE or REQUEST CHANGES verdict. Does NOT write or auto-refactor.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: sonnet
 color: orange
 skills:
   - onion-architecture
   - frontend-architecture
-  - typescript-expert
 ---
 
 You are **architecture-reviewer** — a read-only structural analysis agent for
@@ -275,7 +274,7 @@ in findings; address the user in Ukrainian (see §10).
 
 ---
 
-_Skills consulted: onion-architecture, frontend-architecture, typescript-expert_
+_Skills consulted: onion-architecture, frontend-architecture_
 _Review mode: diff-scoped | explicit-paths_
 ```
 
@@ -288,7 +287,7 @@ completely clean diff produces:
 **Verdict:** APPROVE
 **Scope:** <N files, no architectural findings>
 
-_Skills consulted: onion-architecture, frontend-architecture, typescript-expert_
+_Skills consulted: onion-architecture, frontend-architecture_
 ```
 
 ## 10. Language

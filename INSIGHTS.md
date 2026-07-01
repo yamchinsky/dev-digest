@@ -22,6 +22,11 @@ _2026-06-30_ · `.claude/agents/*.md`, `docs/plans/agent-skill-fleet.md:109,228`
 
 The repo convention is "report/artifacts in **English**, address the user in **Ukrainian**" — but it lives only in agent/skill *Language* footers (e.g. `architecture-reviewer.md:243`, `researcher.md:74`, `doc-writer`/`plan-verifier`/`implementer`/`test-writer` SKILL.md) and the `agent-skill-fleet` plan (lines 109, 228), **not** in any `CLAUDE.md` or contributing guide. So a session running with a "respond in Ukrainian" language setting will wrongly carry it into commit messages and PR bodies (all repo history is English conventional commits). When authoring git/gh artifacts, default to **English** regardless of the chat reply language; reserve Ukrainian for addressing the user in chat. Hit this session: PR #19 body was first written in Ukrainian while its commits were English, then rewritten to English.
 
+### pr-self-review fails open: a diff file matching no routing.md bucket is never reviewed
+_2026-07-02_ · `.claude/skills/pr-self-review/SKILL.md:64-67`, `.claude/skills/pr-self-review/routing.md`
+
+Step 3 classifies diff files into `routing.md` buckets and dispatches one review subagent per non-empty bucket — there is no "unmatched files" fallback, so a file matching NO bucket silently bypasses the blocking CRITICAL gate. Bit us with `mcp/`: real plans touched `mcp/src/**` (blast-radius T3) but `routing.md` had no mcp bucket, and the dual-vendored `client/src/vendor/shared/**` mirror was likewise unmatched — both sailed through pre-PR review unreviewed. Fixed 2026-07-02 by adding an MCP-adapter bucket and the client mirror to the Shared-contracts bucket. When adding a new package or top-level source area, a `routing.md` bucket is part of the definition of done — the gate fails open, not closed, for unmatched paths. Known still-unmatched: `client/messages/**/*.json` and non-`.tsx` files under `client/src/services|utils|providers/**`.
+
 ## Codebase Patterns
 _None yet._
 
@@ -61,6 +66,11 @@ Beyond the exit-code bug above, the deeper smell was *form*: the whole hook live
 _2026-06-20_ · `repo-wide` (git tooling)
 
 `git mv` does not re-read the working tree — it just renames the index entry, carrying HEAD's blob hash to the new path. If you edited A before the move, the index now has stale content at B, and `git status` shows B as both staged-new and unstaged-modified. Always `git add B` after a `git mv` that follows an edit (or do the edit *after* the move). Hit during the AGENTS.md ↔ CLAUDE.md migration: text replacements inside the files silently fell out of the staged rename until re-added.
+
+### New/renamed `.claude/agents/*.md` don't apply mid-session — the agent registry is cached at boot
+_2026-07-02_ · `.claude/agents/` (`repo-wide` tooling)
+
+Same caching family as the settings.json entry below: the subagent registry is snapshotted at session start. An agent file created or renamed mid-session cannot be spawned (`Agent type 'spec-creator' not found`), and a disabled one (renamed to `.md.disabled`) still appears in the session's available list until relaunch. Working workaround without restarting: spawn `general-purpose` with "read `.claude/agents/<name>.md` — its body is your system instruction; act exactly per it", and pass the intended `model` explicitly on the Agent call. Full fix: restart Claude Code.
 
 ### Claude Code caches `.claude/settings.json` at session start — mid-session edits don't apply
 _2026-06-20_ · `.claude/settings.json` (`repo-wide` tooling)

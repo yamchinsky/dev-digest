@@ -14,8 +14,9 @@ parallel Explore subagents). One file may fall into multiple buckets
 | **Backend integration tests** | `server/**/*.it.test.ts` | `drizzle-orm-patterns`, plus the `*.it.test.ts` filename convention from `../TESTING.md` |
 | **Backend unit tests** | `server/**/*.test.ts` (non-`.it.`) | hermetic-only convention check (`src/adapters/mocks.ts`, no real network/keys) |
 | **Review engine** | `reviewer-core/src/**/*.ts` | `onion-architecture` (pure engine, **no I/O**, no `process.env`), `typescript-expert`, `claude-api` (only when LLM provider touched) |
-| **Shared contracts** | `server/src/vendor/shared/**/*.ts` | `zod` + cross-bucket fixture-parity check |
+| **Shared contracts** | `server/src/vendor/shared/**/*.ts`, `client/src/vendor/shared/**/*.ts` (dual-vendored mirror) | `zod` + cross-bucket fixture-parity check |
 | **E2E flows** | `e2e/**/*.flow.json`, `e2e/**/*.ts` | conventions from `e2e/CLAUDE.md` — JSON-only specs, deterministic locators (no `chat`), read-only seeded fixtures |
+| **MCP adapter** | `mcp/src/**/*.ts` | `typescript-expert`, `zod`, `security`, plus conventions from `mcp/AGENTS.md` — outbound-adapter boundary (no server internals), stdout = JSON-RPC only, `wrapUntrusted` on third-party text |
 | **DB schema / migrations** | `server/src/db/schema/**`, `server/src/db/migrations/**` | `drizzle-orm-patterns`, `postgresql-table-design`, paired-migration check |
 | **Settings / CI** | `.claude/**`, `.github/workflows/**`, `*/package.json` | structural JSON/YAML check; LOW-severity only |
 | **Docs / specs** | `*.md`, `specs/**` | skip; report `bucket: "docs", skipped: true` |
