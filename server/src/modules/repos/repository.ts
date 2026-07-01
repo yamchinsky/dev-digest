@@ -1,13 +1,13 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
+import type { RepoRow } from '../../db/rows.js';
+export type { RepoRow };
 
 /**
  * F1 — repos data-access layer. The ONLY place that touches the `repos`
  * table. Every query is scoped by `workspaceId` (tenancy guard).
  */
-
-export type RepoRow = typeof t.repos.$inferSelect;
 
 export interface InsertRepo {
   workspaceId: string;
@@ -83,5 +83,20 @@ export class RepoRepository {
       .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, id)))
       .returning({ id: t.repos.id });
     return deleted.length > 0;
+  }
+
+  /**
+   * Batch-fetch clone paths for a set of repo ids.
+   * Guard: returns [] immediately when `repoIds` is empty — `inArray` with an
+   * empty array generates invalid SQL.
+   */
+  async getClonePathsByIds(
+    repoIds: string[],
+  ): Promise<Array<{ id: string; clonePath: string | null }>> {
+    if (repoIds.length === 0) return [];
+    return this.db
+      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
+      .from(t.repos)
+      .where(inArray(t.repos.id, repoIds));
   }
 }

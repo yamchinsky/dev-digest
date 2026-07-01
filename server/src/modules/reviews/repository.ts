@@ -1,4 +1,3 @@
-import { inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
@@ -14,11 +13,10 @@ import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
  * composes them so its public API stays identical.
  */
 
-import type { FindingRow, PullRow } from '../../db/rows.js';
-export type { FindingRow, PullRow };
+import type { FindingRow, PullRow, RepoRow } from '../../db/rows.js';
+export type { FindingRow, PullRow, RepoRow };
 
 export type ReviewRow = typeof t.reviews.$inferSelect;
-export type RepoRow = typeof t.repos.$inferSelect;
 
 import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
@@ -33,7 +31,7 @@ export class ReviewRepository {
     return pullRepo.getPull(this.db, workspaceId, prId);
   }
 
-  getRepo(repoId: string): Promise<typeof t.repos.$inferSelect | undefined> {
+  getRepo(repoId: string): Promise<RepoRow | undefined> {
     return pullRepo.getRepo(this.db, repoId);
   }
 
@@ -192,20 +190,6 @@ export class ReviewRepository {
     | undefined
   > {
     return runRepo.getRunCostInputs(this.db, runId);
-  }
-
-  /**
-   * Batch-fetch clone paths for a set of repo ids.
-   * Used by run-executor to look up clone paths without importing Drizzle directly.
-   */
-  async getClonePathsByIds(
-    repoIds: string[],
-  ): Promise<Array<{ id: string; clonePath: string | null }>> {
-    if (repoIds.length === 0) return [];
-    return this.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(inArray(t.repos.id, repoIds));
   }
 
   /** Token+model rows for all DONE runs in a set of PRs (for PR list cost agg). */

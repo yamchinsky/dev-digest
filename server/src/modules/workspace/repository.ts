@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 
@@ -51,30 +51,5 @@ export class WorkspaceRepository {
     }
 
     return map;
-  }
-
-  /** All repos for a workspace — id + clone_path projection for context-doc discovery. */
-  async listReposForWorkspace(
-    workspaceId: string,
-  ): Promise<Array<{ id: string; clonePath: string | null }>> {
-    return this.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(eq(t.repos.workspaceId, workspaceId));
-  }
-
-  /**
-   * Single repo for a workspace by id.
-   * Returns undefined when not found or when the repo does not belong to this workspace.
-   */
-  async getRepoByIdForWorkspace(
-    workspaceId: string,
-    repoId: string,
-  ): Promise<{ id: string; clonePath: string | null } | undefined> {
-    const [row] = await this.db
-      .select({ id: t.repos.id, clonePath: t.repos.clonePath })
-      .from(t.repos)
-      .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, repoId)));
-    return row;
   }
 }

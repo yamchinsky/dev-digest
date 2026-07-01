@@ -8,6 +8,7 @@ import { RunLogger } from '../../platform/run-logger.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow, RepoRow } from './repository.js';
 import { SkillsRepository } from '../skills/repository.js';
+import { RepoRepository } from '../repos/repository.js';
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
@@ -46,6 +47,7 @@ export type RunOutcome = {
  */
 export class ReviewRunExecutor {
   private readonly skills: SkillsRepository;
+  private readonly repoRepo: RepoRepository;
 
   constructor(
     private container: Container,
@@ -53,6 +55,7 @@ export class ReviewRunExecutor {
     private agents: Container['agentsRepo'],
   ) {
     this.skills = new SkillsRepository(container.db);
+    this.repoRepo = new RepoRepository(container.db);
   }
 
   /**
@@ -283,7 +286,7 @@ export class ReviewRunExecutor {
       if (mergedDocs.length > 0) {
         // 4. Batch-fetch clone paths: ONE query for all unique repoIds (not per-doc).
         const uniqueRepoIds = [...new Set(mergedDocs.map((d) => d.repoId))];
-        const repoRows = await this.repo.getClonePathsByIds(uniqueRepoIds);
+        const repoRows = await this.repoRepo.getClonePathsByIds(uniqueRepoIds);
         const clonePathById = new Map(repoRows.map((r) => [r.id, r.clonePath]));
 
         // 5. Read files in merge order; gracefully handle missing and empty cases.
