@@ -36,7 +36,10 @@ SPEC-01 AC-16 says a missing attached doc "SHALL log a `warn` entry", but the ru
 
 ## Codebase Patterns
 
-### Compute run cost on read; never persist it
+### Zod `response` schemas are ENFORCED at runtime by serializerCompiler — they gate persisted-jsonb shape drift
+_2026-07-03_ · `server/src/app.ts` (global `serializerCompiler`), e.g. `modules/onboarding-tours/routes.ts` (`response: { 200: OnboardingTour }`)
+
+Declaring `response: { 200: Schema }` on a route is not documentation: `fastify-type-provider-zod`'s globally installed `serializerCompiler` validates the payload on the way OUT, so a row whose jsonb no longer matches the contract (e.g. `onboarding_tours.sections` persisted under an older shape) fails serialization → 500 → the client renders ErrorState instead of crashing on `.map`-of-string. Two consequences: (1) when evolving a persisted-jsonb contract, old rows become 500s until regenerated/backfilled — that's the designed failure mode, don't "fix" it by removing the response schema; (2) a service-level cast (`row.sections as X`) is less dangerous than it looks, because the route boundary still enforces the real shape. Found while judging the SPEC-02 legacy-row hazard during pr-self-review.
 _2026-06-18_ · `server/src/modules/reviews/service.ts:70-89`, `server/src/modules/reviews/run-executor.ts:264-273`, `server/src/modules/pulls/routes.ts:131-152`
 
 `reviewer-core` already produces `outcome.costUsd`, but we deliberately drop
