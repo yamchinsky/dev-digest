@@ -28,6 +28,14 @@ const PreviewQuery = z.object({
   path: z.string().min(1),
 });
 
+/** Body for the content-update endpoint. Content is bounded (1 MB) so a
+ *  malformed client can't stream an arbitrarily large file onto disk. */
+const UpdateContentBody = z.object({
+  repoId: z.string().uuid(),
+  path: z.string().min(1),
+  content: z.string().max(1_000_000),
+});
+
 /** Params for repo-scoped endpoints (repoId is a uuid FK → repos.id). */
 const RepoIdParams = z.object({ repoId: z.string().uuid() });
 
@@ -85,6 +93,25 @@ export default async function workspaceRoutes(appBase: FastifyInstance) {
     async (req) => {
       const { workspaceId } = await getContext(container, req);
       return service.preview(workspaceId, req.query.repoId, req.query.path);
+    },
+  );
+
+  /**
+   * Overwrite the content of a single context doc (SPEC-01 amendment: in-place
+   * editing). Same whitelist gate as preview — only paths already in the
+   * discovered set are writable.
+   */
+  app.put(
+    '/workspace/context-docs/content',
+    { schema: { body: UpdateContentBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.updateContent(
+        workspaceId,
+        req.body.repoId,
+        req.body.path,
+        req.body.content,
+      );
     },
   );
 }

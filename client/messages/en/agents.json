@@ -97,8 +97,9 @@
     "addCta": "Add a skill"
   },
   "context": {
-    "title": "Context Docs",
+    "title": "Project context",
     "attachedCount": "{attached} of {total} attached",
+    "filterPlaceholder": "Filter documents…",
     "orderHint": "Order matters — earlier docs appear earlier in the assembled prompt. Drag to reorder.",
     "empty": "No context docs found in this workspace. Add .md files to your repos under specs/, docs/, or insights/ folders.",
     "loadError": "Could not load context docs.",

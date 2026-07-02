@@ -17,6 +17,14 @@
     "placeholder": {
       "title": "Select a doc",
       "body": "Pick a file on the left to preview its content."
-    }
+    },
+    "tabs": {
+      "preview": "Preview",
+      "edit": "Edit"
+    },
+    "editHint": "Saves to the file in the repo clone — a re-sync from GitHub may overwrite it.",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel"
   }
 }

@@ -38,7 +38,7 @@ export default function ContextDocsPage() {
           <ContextDocsList selected={selected} onSelect={setSelected} />
         </div>
 
-        {/* right: preview ~60% */}
+        {/* right: preview ~60% — keyed by doc so tab/draft state resets on switch */}
         <div
           style={{
             flex: "0 0 60%",
@@ -46,7 +46,10 @@ export default function ContextDocsPage() {
             overflow: "auto",
           }}
         >
-          <ContextDocsPreview selected={selected} />
+          <ContextDocsPreview
+            key={selected ? `${selected.repoId}:${selected.path}` : "none"}
+            selected={selected}
+          />
         </div>
       </div>
     </AppShell>

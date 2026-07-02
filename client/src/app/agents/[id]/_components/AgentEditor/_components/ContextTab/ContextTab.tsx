@@ -27,7 +27,7 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Checkbox, Icon, Skeleton, ErrorState, Markdown } from "@devdigest/ui";
+import { Checkbox, Icon, Skeleton, ErrorState, Markdown, TextInput } from "@devdigest/ui";
 import type { Agent, ContextDoc, ContextDocCategory } from "@devdigest/shared";
 import {
   useWorkspaceContextDocs,
@@ -208,6 +208,7 @@ function SortableDocRow({
 
 export function ContextTab({ agent }: { agent: Agent }) {
   const t = useTranslations("agents");
+  const [filter, setFilter] = React.useState("");
 
   const {
     data: allDocs,
@@ -265,6 +266,14 @@ export function ContextTab({ agent }: { agent: Agent }) {
   const unattachedDisplay = (allDocs ?? [])
     .filter((doc) => !attachedKeySet.has(docKey(doc.repo_id, doc.relative_path)))
     .sort((a, b) => a.relative_path.localeCompare(b.relative_path));
+
+  // Client-side path filter — hides rows only; attachment order and the DnD
+  // item registry keep operating on the full list, so a drag while filtered
+  // still reorders against true positions.
+  const matchesFilter = (doc: ContextDoc) =>
+    !filter.trim() || doc.relative_path.includes(filter);
+  const attachedVisible = attachedDisplay.filter(matchesFilter);
+  const unattachedVisible = unattachedDisplay.filter(matchesFilter);
 
   // DnD item IDs (scoped to the attached group)
   const orderedKeys = orderedAttached.map(({ repo_id, relative_path }) =>
@@ -388,6 +397,13 @@ export function ContextTab({ agent }: { agent: Agent }) {
         >
           {t("context.attachedCount", { attached: attachedCount, total: totalCount })}
         </span>
+        <div style={{ marginLeft: "auto", width: 240 }}>
+          <TextInput
+            value={filter}
+            onChange={setFilter}
+            placeholder={t("context.filterPlaceholder")}
+          />
+        </div>
       </div>
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
         {t("context.orderHint")}
@@ -416,7 +432,7 @@ export function ContextTab({ agent }: { agent: Agent }) {
             >
               {/* Attached docs — sortable */}
               <SortableContext items={orderedKeys} strategy={verticalListSortingStrategy}>
-                {attachedDisplay.map((doc) => (
+                {attachedVisible.map((doc) => (
                   <SortableDocRow
                     key={docKey(doc.repo_id, doc.relative_path)}
                     doc={doc}
@@ -429,7 +445,7 @@ export function ContextTab({ agent }: { agent: Agent }) {
 
               {/* Unattached docs — rendered outside the SortableContext;
                   they become draggable only after being checked. */}
-              {unattachedDisplay.map((doc) => (
+              {unattachedVisible.map((doc) => (
                 <SortableDocRow
                   key={docKey(doc.repo_id, doc.relative_path)}
                   doc={doc}
