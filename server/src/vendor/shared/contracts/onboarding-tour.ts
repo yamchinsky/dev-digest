@@ -13,8 +13,11 @@ export const TourLLMSchema = z.object({
   architecture_overview: z.string().min(1),
   critical_paths: z.string().min(1),
   how_to_run_locally: z.string().min(1),
+  // description is intentionally NOT min(1): providers' constrained decoding
+  // ignores minLength, and models leave "" for unfamiliar (vendored/generated)
+  // files — a hard min fails the whole response; the service falls back to ''.
   reading_path: z.array(
-    z.object({ file: z.string().min(1), description: z.string().min(1) }),
+    z.object({ file: z.string().min(1), description: z.string() }),
   ),
   first_tasks: z.string().min(1),
 });

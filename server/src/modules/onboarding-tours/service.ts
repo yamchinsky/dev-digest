@@ -142,7 +142,17 @@ export class OnboardingTourService {
           'top-files',
           topFiles.join('\n') || '(no files indexed)',
         )}`,
-        `For reading_path: return exactly one entry per file listed under "Files ordered by code importance", in the same order, with a one-to-two sentence description of what each file does.`,
+        // The final instruction enumerates ALL five required fields — deepseek via
+        // OpenRouter does not grammar-enforce the JSON schema, and a trailing
+        // instruction about a single field makes it answer with only that field
+        // (bit us on the first live generation: response contained reading_path only).
+        `Respond with a JSON object containing ALL five fields:\n` +
+          `1. "architecture_overview" — markdown prose: what the system is, key entry points, how the parts fit together.\n` +
+          `2. "critical_paths" — markdown: the most important dependency chains and why they matter.\n` +
+          `3. "how_to_run_locally" — markdown: the likely install/run commands inferred from the file tree.\n` +
+          `4. "reading_path" — array with EXACTLY one {"file", "description"} entry per file listed under "Files ordered by code importance", in the same order; one-to-two sentence description each.\n` +
+          `5. "first_tasks" — markdown: 3-5 suggested first tasks for a newcomer.\n` +
+          `Every field is required; do not omit any.`,
       ].join('\n\n');
 
       // Step 12: Start timer immediately before the LLM call
@@ -160,7 +170,10 @@ export class OnboardingTourService {
             { role: 'user', content: userMessage },
           ],
           temperature: 0.2,
-          maxTokens: 4000,
+          // Five markdown sections + a description per reading-path file easily
+          // exceed 4k output tokens; a truncated response fails schema validation
+          // on both attempts (hit on the first live generation).
+          maxTokens: 12_000,
           maxRetries: 1,
         });
       } catch (err) {
