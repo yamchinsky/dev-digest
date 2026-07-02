@@ -24,6 +24,11 @@ non-OpenRouter model means adding its id to `pricing.ts`, and the key must
 match the string persisted in `agent_runs.model` exactly (whatever the
 provider passes to `estimateCost`), or the fallback still misses.
 
+### Provider keys may live in `server/.env`, not the documented `~/.devdigest/secrets.json`
+_2026-07-02_ · `server/src/adapters/secrets/local.ts:37-42`, `server/src/platform/config.ts:74`
+
+Docs (README/AGENTS) say secrets live in `~/.devdigest/secrets.json` (0600) — but that file only exists after a key is saved via the Settings UI. `LocalSecretsProvider.get()` falls back to `process.env`, so on a setup where keys were provided via `server/.env` the JSON file never gets created, yet `/settings/secrets-status` reports every provider `true`. A script that reads `~/.devdigest/secrets.json` directly (e.g. to reuse the OpenRouter key for an ad-hoc API call) fails with ENOENT — read the key from `server/.env` as the fallback source, mirroring the provider's own order (file first, then env; `GITHUB_TOKEN` additionally falls back to `GITHUB_PAT`).
+
 ### The missing-context-doc "warn" is logged as `kind: "info"` with a literal `[warn]` prefix in the message
 _2026-07-02_ · `server/src/modules/reviews/run-executor.ts:297`
 
@@ -67,6 +72,11 @@ _2026-07-02_ · `server/src/modules/agents/repository.ts` (`replaceContextDocs` 
 The delete-then-bulk-insert "replace" pattern must run inside one `db.transaction()` — `replaceContextDocs` (context docs) does this and is the first `db.transaction()` use in any repository. The older `setSkills` does two bare awaits (DELETE, then INSERT): a crash between them leaves the agent with zero skills. When touching `setSkills` next, wrap it in a transaction; when adding any new replace-style method, copy `replaceContextDocs`, not `setSkills`.
 
 ## Tool & Library Notes
+
+### Drizzle `text('col', { enum: [...] })` is TypeScript-only — no SQL CHECK constraint is generated
+_2026-07-02_ · `server/src/db/schema/context.ts` (`onboarding_tours.index_status_at_generation`), repo-wide pattern
+
+The `enum` option on Drizzle's `text()` column produces a discriminated-union TYPE for queries/inserts, but the emitted SQL is plain `text NOT NULL` — Postgres will happily store any string. Every `text(..., { enum: [...] })` column in this schema behaves the same. Don't rely on the DB to reject invalid enum values (e.g. in an `.it.test.ts` asserting a constraint violation — there is none); enforcement happens only at the Zod contract / service layer. If DB-level enforcement is ever needed, that's `pgEnum` or an explicit CHECK, a schema change + migration.
 
 ### `fs.promises.glob` returns an AsyncIterator, warns "experimental", and does not follow symlinks
 _2026-07-02_ · `server/src/modules/workspace/discovery.ts`
