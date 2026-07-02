@@ -56,7 +56,10 @@ Strings that mirror what the LLM actually receives (e.g. the `## Project context
 
 ## Tool & Library Notes
 
-### `(["a","b"] as const).includes(x)` rejects a wider union — use `new Set([...]).has(x)` for subset checks
+### Swapped inline-style variants must not mix a `border` shorthand with a `borderBottom` longhand
+_2026-07-03_ · `src/app/repos/[repoId]/onboarding-tour/_components/OnboardingTour/OnboardingTour.tsx` (`cardHeaderOpen/Closed`)
+
+React warns "Removing a style property during rerender (borderBottom) when a conflicting property is set (border)" — and can mis-style — when a component toggles between two style objects where the base uses the `border` shorthand and only ONE variant adds a `borderBottom` longhand: the rerender REMOVES the longhand next to the shorthand. Nothing static catches this (tsc/vitest/review all passed); it surfaced only at runtime in dev. Rule for any open/closed–style variant pair: use longhands only (`borderTop/Right/Left: "none"`), and keep the SAME property present in both variants (e.g. `borderBottom: "1px solid transparent"` when closed) so no property disappears across rerenders.
 _2026-07-02_ · `src/app/repos/[repoId]/onboarding-tour/_components/OnboardingTour/OnboardingTour.tsx` (`INCOMPLETE_STATUSES`)
 
 TypeScript types a const tuple's `.includes()` parameter as the tuple's own literal union, so checking a value typed as a WIDER union (e.g. `"full" | "partial" | "degraded" | "failed"` against `["partial","degraded","failed"] as const`) is a compile error, not a runtime question. `new Set(["partial","degraded","failed"]).has(x)` compiles and reads the same. Recurs in any "badge visible for a subset of enum values" UI pattern driven by shared-contract enums.
