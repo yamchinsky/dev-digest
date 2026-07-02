@@ -25,7 +25,10 @@ export const TourLLMSchema = z.object({
   // Ordered shell commands — each entry is one executable line (may carry a
   // trailing `# comment`). Array form lets the UI render numbered rows with
   // per-row copy buttons rather than a freeform markdown block.
-  how_to_run_locally: z.array(z.string().min(1)),
+  // Not min(1): same tolerable-empty rule as `why`/`description` — one blank
+  // entry from the model must not fail the whole response; the service
+  // filters empties before persisting.
+  how_to_run_locally: z.array(z.string()),
   reading_path: z.array(
     z.object({ file: z.string().min(1), description: z.string() }),
   ),

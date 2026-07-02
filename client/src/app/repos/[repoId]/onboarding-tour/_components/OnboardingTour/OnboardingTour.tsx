@@ -96,16 +96,16 @@ export function OnboardingTour({ repoId }: Props) {
   const [copied, setCopied] = React.useState(false);
   const [copiedIdx, setCopiedIdx] = React.useState<number | null>(null);
 
-  // F4: detect in-progress dedup response → info toast (not an error)
-  React.useEffect(() => {
-    if (
-      generate.data &&
-      "status" in generate.data &&
-      generate.data.status === "in_progress"
-    ) {
-      toast.info(t("inProgress"));
-    }
-  }, [generate.data, toast, t]);
+  // F4: mutation completion is an EVENT — the in-progress dedup response is
+  // handled in onSuccess of the mutate call, not in an effect watching data.
+  const startGenerate = () =>
+    generate.mutate(undefined, {
+      onSuccess: (data) => {
+        if ("status" in data && data.status === "in_progress") {
+          toast.info(t("inProgress"));
+        }
+      },
+    });
 
   // F3: repos still loading → skeleton (never interpret null activeRepo as "no clone path")
   if (!reposLoaded) {
@@ -148,7 +148,7 @@ export function OnboardingTour({ repoId }: Props) {
         />
         <Button
           kind="primary"
-          onClick={() => generate.mutate()}
+          onClick={startGenerate}
           loading={generate.isPending}
           disabled={generate.isPending}
         >
@@ -163,16 +163,25 @@ export function OnboardingTour({ repoId }: Props) {
   const showBadge = INCOMPLETE_STATUSES.has(tourData.index_status_at_generation);
 
   const onShare = async () => {
-    await navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard can reject (permission denied / non-secure context)
+      toast.error(t("copyFailed"));
+    }
   };
 
-  const copyCommand = (cmd: string, idx: number) => {
-    navigator.clipboard.writeText(cmd);
-    setCopiedIdx(idx);
-    // Clear only this index after 2 s (ignore if another copy fired meanwhile)
-    setTimeout(() => setCopiedIdx((i) => (i === idx ? null : i)), 2000);
+  const copyCommand = async (cmd: string, idx: number) => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopiedIdx(idx);
+      // Clear only this index after 2 s (ignore if another copy fired meanwhile)
+      setTimeout(() => setCopiedIdx((i) => (i === idx ? null : i)), 2000);
+    } catch {
+      toast.error(t("copyFailed"));
+    }
   };
 
   // By State C guard above, activeRepo is non-null and has full_name + default_branch
@@ -211,7 +220,7 @@ export function OnboardingTour({ repoId }: Props) {
           {/* AC-14: regenerate button */}
           <Button
             kind="secondary"
-            onClick={() => generate.mutate()}
+            onClick={startGenerate}
             loading={generate.isPending}
             disabled={generate.isPending}
           >
@@ -220,9 +229,9 @@ export function OnboardingTour({ repoId }: Props) {
         </div>
       </div>
 
-      {/* Mini-TOC "ON THIS PAGE" — 5 anchor links */}
-      <nav aria-label="On this page" style={s.toc}>
-        <span style={s.tocLabel}>ON THIS PAGE</span>
+      {/* Mini-TOC — 5 anchor links */}
+      <nav aria-label={t("toc.aria")} style={s.toc}>
+        <span style={s.tocLabel}>{t("toc.label")}</span>
         {[
           { id: SECTION_ARCHITECTURE, label: t("sections.architectureOverview") },
           { id: SECTION_CRITICAL_PATHS, label: t("sections.criticalPaths") },

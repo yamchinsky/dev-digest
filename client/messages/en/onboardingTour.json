@@ -15,6 +15,11 @@
     "body": "Unexpected error — click retry or reload the page."
   },
   "inProgress": "Generation already running — refresh shortly.",
+  "copyFailed": "Could not copy to clipboard.",
+  "toc": {
+    "label": "ON THIS PAGE",
+    "aria": "On this page"
+  },
   "time": {
     "justNow": "just now",
     "minutesAgo": "{count, plural, one {# minute ago} other {# minutes ago}}",

@@ -2,8 +2,8 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/services/api";
-import type { OnboardingTour } from "@devdigest/shared";
+import { api, ApiError } from "@/services/api";
+import type { GenerationLog, OnboardingTour } from "@devdigest/shared";
 
 const QUERY_KEY = (repoId: string) => ["onboarding-tour", repoId] as const;
 
@@ -20,14 +20,15 @@ export function useOnboardingTour(repoId: string) {
       try {
         return await api.get<OnboardingTour>(`/repos/${repoId}/onboarding-tour`);
       } catch (err: unknown) {
-        if (err && typeof err === "object" && "status" in err && err.status === 404) {
+        if (err instanceof ApiError && err.status === 404) {
           return null;
         }
         throw err; // 5xx re-thrown — caller renders ErrorState
       }
     },
     enabled: !!repoId,
-    staleTime: 0, // always re-fetch on mount; tour content is large and infrequently updated
+    // No staleTime override — the 30s global default fits an infrequently
+    // regenerated tour; the generate mutation pushes fresh content via setQueryData.
   });
 }
 
@@ -48,7 +49,7 @@ export function useGenerateTour(repoId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      api.post<{ tour: OnboardingTour; log: unknown } | { status: "in_progress" }>(
+      api.post<{ tour: OnboardingTour; log: GenerationLog } | { status: "in_progress" }>(
         `/repos/${repoId}/onboarding-tour/generate`,
         {},
       ),
