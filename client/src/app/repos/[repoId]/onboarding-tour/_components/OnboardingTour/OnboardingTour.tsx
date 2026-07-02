@@ -348,7 +348,12 @@ const cardHeaderBase: React.CSSProperties = {
   width: "100%",
   padding: "12px 16px",
   background: "none",
-  border: "none",
+  // No `border` shorthand here: the open/closed variants swap borderBottom,
+  // and mixing a shorthand with a longhand of the same property makes React
+  // warn when the longhand disappears across a rerender. Longhands only.
+  borderTop: "none",
+  borderRight: "none",
+  borderLeft: "none",
   cursor: "pointer",
   textAlign: "left",
 };
@@ -450,8 +455,11 @@ const s = {
     ...cardHeaderBase,
     borderBottom: "1px solid var(--border)",
   } as React.CSSProperties,
+  // Same property present in both variants (transparent when closed) so the
+  // rerender never REMOVES borderBottom — that's what triggered the warning.
   cardHeaderClosed: {
     ...cardHeaderBase,
+    borderBottom: "1px solid transparent",
   } as React.CSSProperties,
   cardIcon: {
     color: "var(--accent-text)",
