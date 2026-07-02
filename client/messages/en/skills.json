@@ -99,10 +99,13 @@
     "version": "v{version}"
   },
   "contextSection": {
-    "heading": "Context docs",
+    "heading": "Project context to use",
     "nAttached": "{count} attached",
-    "filterPlaceholder": "Filter by path…",
+    "inheritHint": "Any agent using this skill inherits these documents.",
+    "filterPlaceholder": "Filter documents…",
     "empty": "No docs found in this workspace.",
-    "serializesAs": "SERIALIZES AS"
+    "serializesAs": "SERIALIZES AS",
+    "previewShow": "Show preview",
+    "previewHide": "Hide preview"
   }
 }

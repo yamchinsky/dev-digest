@@ -32,6 +32,11 @@ _2026-07-02_ · `.claude/skills/pr-self-review/SKILL.md:64-67`, `.claude/skills/
 
 Step 3 classifies diff files into `routing.md` buckets and dispatches one review subagent per non-empty bucket — there is no "unmatched files" fallback, so a file matching NO bucket silently bypasses the blocking CRITICAL gate. Bit us with `mcp/`: real plans touched `mcp/src/**` (blast-radius T3) but `routing.md` had no mcp bucket, and the dual-vendored `client/src/vendor/shared/**` mirror was likewise unmatched — both sailed through pre-PR review unreviewed. Fixed 2026-07-02 by adding an MCP-adapter bucket and the client mirror to the Shared-contracts bucket. When adding a new package or top-level source area, a `routing.md` bucket is part of the definition of done — the gate fails open, not closed, for unmatched paths. Known still-unmatched: `client/messages/**/*.json` and non-`.tsx` files under `client/src/services|utils|providers/**`.
 
+### plan-verifier passes UI code that is never mounted — code existence ≠ reachability
+_2026-07-02_ · `docs/plans/project-context.md:405` (T10), `.claude/skills/plan-verifier/SKILL.md`
+
+SPEC-01 T10 was implemented exactly per plan into `SkillEditor.tsx`, but that component is only mounted at `/skills/new` in create mode while the new section was gated `isEdit && existing` — so the shipped feature was unreachable from any screen, despite green typecheck, tests, plan-verifier coverage, arch review, and PR review. Two-layer failure: the **plan** named the wrong owned path (the legacy `SkillEditor` instead of the actually-mounted `SkillsLab` → `SkillDetail` tabs — verify a component's mount points with grep before assigning it as an owned path), and **plan-verifier** accepted "component + hooks exist in the named file" as evidence without tracing the render path from a routed page. For UI acceptance criteria, evidence must include the mount chain (`page.tsx → … → component`), not just the diff. Found only by manually comparing the running app against the design mockups; fixed 2026-07-02 by moving the feature to a real Context tab in `SkillsLab`.
+
 ## Codebase Patterns
 _None yet._
 
@@ -120,4 +125,8 @@ Lab also expects each module's `INSIGHTS.md` populated. Fastest path: write entr
 Demo PRs (`server/src/db/seed-demo-prs.ts`, idempotent, opt-in) cover both modes: PRs #101–#105 are pure DB rows with pre-seeded findings (visual only, can't be agent-reviewed — head_sha doesn't exist on GitHub); PRs #3–#5 are real and reviewable.
 
 ## Open Questions
-_None yet._
+
+### SPEC-01 AC-20 says HTTP 400, but the server returns 422 for context-doc whitelist violations
+_2026-07-02_ · `specs/SPEC-01-2026-07-project-context-folder.md:67`, `PUT /agents/:id/context-docs`
+
+Live verification: submitting a path outside the discovered set (e.g. `../../etc/passwd`) returns **422** `validation_error` / `INVALID_CONTEXT_DOC_PATH` with correct no-partial-persistence semantics — but AC-20 (and plan R7) normatively say **400**. The 422 matches the server-wide error taxonomy (all `ValidationError`s → 422, post-a44f69f), so the spec text is what's stale, not the code. Any future e2e/IT test written from the spec verbatim will fail on the status code. Pending decision: update AC-20 wording to 422 (recommended) vs. special-casing this route to 400. Don't "fix" the server to 400 without reading this.

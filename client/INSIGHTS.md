@@ -10,6 +10,11 @@ _None yet._
 
 ## What Doesn't Work
 
+### `SkillEditor.tsx` is only mounted at `/skills/new` (create) — the edit surface is `SkillsLab` → `SkillDetail` tabs
+_2026-07-02_ · `src/app/skills/new/page.tsx`, `src/app/skills/_components/SkillsLab/SkillsLab.tsx`
+
+Despite its name, `SkillEditor` is not where existing skills get edited — `/skills/[id]` renders `SkillsLab`, whose `DetailPane` tabs (`SkillDetail/ConfigTab` etc.) are the real edit surface. Anything added to `SkillEditor` behind an `isEdit` gate is dead code. This shipped an unreachable SPEC-01 feature; full post-mortem in the root `INSIGHTS.md` ("plan-verifier passes UI code that is never mounted").
+
 ### Smart Diff shows no severity badges when the PR has no findings — not a render bug
 _2026-06-28_ · `GET /pulls/:id/smart-diff`, `src/components/diff-viewer/CodeLine/CodeLine.tsx`
 
@@ -62,6 +67,11 @@ When a clickable wrapper `<button aria-label="…">` contains only `<SeverityBad
 
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages
 _2026-06-18_ · see repo-root `INSIGHTS.md` → Recurring Errors & Fixes (cross-module; concrete client bite was `RunTraceDrawer.test.tsx:10`)
+
+### Editor tabs have TWO registries — the render list AND a page-level `VALID_TABS` URL whitelist; missing the second makes the tab a silent no-op
+_2026-07-02_ · `src/app/agents/[id]/page.tsx:15` vs `_components/AgentEditor/constants.ts`, same pattern in `skills/_components/SkillsLab/SkillsLab.tsx:44`
+
+Tab state lives in `?tab=`, and the page validates the param against its own `VALID_TABS` array before passing it down — separate from the `TABS`/`TAB_DEFS` list that renders the tab bar. Adding a tab only to the render list produces a tab that LOOKS clickable but snaps back to `config`: the click writes `?tab=context` to the URL, the whitelist rejects it, and the fallback renders. No error, no console warning — bit us twice in SPEC-01 (agent Context tab shipped this way; the skills Context tab would have too if both spots in `SkillsLab.tsx` weren't updated together). When adding an editor tab, grep for `VALID_TABS` next to the page that owns the `?tab=` param.
 
 ## Session Notes
 _None yet._
