@@ -148,8 +148,8 @@ export class OnboardingTourService {
         // (bit us on the first live generation: response contained reading_path only).
         `Respond with a JSON object containing ALL five fields:\n` +
           `1. "architecture_overview" — markdown prose: what the system is, key entry points, how the parts fit together.\n` +
-          `2. "critical_paths" — markdown: the most important dependency chains and why they matter.\n` +
-          `3. "how_to_run_locally" — markdown: the likely install/run commands inferred from the file tree.\n` +
+          `2. "critical_paths" — array of {file, why} objects: the 4-8 most important files or paths with a one-line reason each (e.g. [{"file":"src/index.ts","why":"Main entry point"}]).\n` +
+          `3. "how_to_run_locally" — array of shell command strings in execution order, inferred from the file tree (e.g. ["npm install","npm run build","npm start"]; a command may carry a trailing # comment).\n` +
           `4. "reading_path" — array with EXACTLY one {"file", "description"} entry per file listed under "Files ordered by code importance", in the same order; one-to-two sentence description each.\n` +
           `5. "first_tasks" — markdown: 3-5 suggested first tasks for a newcomer.\n` +
           `Every field is required; do not omit any.`,

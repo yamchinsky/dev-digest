@@ -15,6 +15,12 @@
     "body": "Unexpected error — click retry or reload the page."
   },
   "inProgress": "Generation already running — refresh shortly.",
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{count, plural, one {# minute ago} other {# minutes ago}}",
+    "hoursAgo": "{count, plural, one {# hour ago} other {# hours ago}}",
+    "daysAgo": "{count, plural, one {# day ago} other {# days ago}}"
+  },
   "sections": {
     "architectureOverview": "Architecture Overview",
     "criticalPaths": "Critical Paths",
@@ -22,8 +28,16 @@
     "readingPath": "Guided Reading Path",
     "firstTasks": "First Tasks"
   },
+  "criticalPaths": {
+    "openFile": "Open"
+  },
   "howToRun": {
-    "disclaimer": "These commands are LLM-inferred from the repository structure and have not been verified by execution. Always review before running."
+    "disclaimer": "These commands are LLM-inferred from the repository structure and have not been verified by execution. Always review before running.",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "readingPath": {
+    "rank": "{rank}th percentile"
   },
   "actions": {
     "generate": "Generate",

@@ -5,11 +5,14 @@ import { z } from 'zod';
 // `server/src/modules/onboarding-tours/helpers.ts`. This file holds only the
 // domain contracts the client consumes.
 
-/** Four prose sections persisted in onboarding_tours.sections. */
+/** Five-field sections object persisted in onboarding_tours.sections (jsonb).
+ *  critical_paths and how_to_run_locally are structured arrays so the client
+ *  can render per-item rows (with Open links / copy buttons) without parsing
+ *  freeform markdown. */
 export const OnboardingTourSections = z.object({
   architecture_overview: z.string(),
-  critical_paths: z.string(),
-  how_to_run_locally: z.string(),
+  critical_paths: z.array(z.object({ file: z.string(), why: z.string() })),
+  how_to_run_locally: z.array(z.string()),
   first_tasks: z.string(),
 });
 export type OnboardingTourSections = z.infer<typeof OnboardingTourSections>;

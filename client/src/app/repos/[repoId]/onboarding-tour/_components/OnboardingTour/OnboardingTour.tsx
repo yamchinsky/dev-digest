@@ -5,12 +5,21 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, EmptyState, ErrorState, Markdown, Skeleton } from "@devdigest/ui";
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Icon,
+  Markdown,
+  Skeleton,
+  type LucideIcon,
+} from "@devdigest/ui";
 import { useOnboardingTour, useGenerateTour } from "@/lib/hooks";
 import { useActiveRepo } from "@/providers/repo-context";
 import { useToast } from "@/providers/toast";
 
-// Stable section anchor IDs (module-level constants, not recreated on render)
+// Section anchor IDs (module-level constants — not recreated on render)
 const SECTION_ARCHITECTURE = "section-architecture";
 const SECTION_CRITICAL_PATHS = "section-critical-paths";
 const SECTION_HOW_TO_RUN = "section-how-to-run";
@@ -20,18 +29,59 @@ const SECTION_FIRST_TASKS = "section-first-tasks";
 /** index_status values that indicate an incomplete/degraded index (AC-10, AC-11). */
 const INCOMPLETE_STATUSES = new Set(["degraded", "partial", "failed"]);
 
-/** Manual relative-time formatter (date-fns is not in the client bundle). */
-function relativeTime(isoString: string): string {
+/**
+ * Manual relative-time formatter with i18n translations.
+ * Pure computation is module-level; `t` is passed in so no English is hardcoded.
+ * Uses ICU plural keys from the "time" sub-namespace of onboardingTour.json.
+ */
+// We accept a loose callable type to avoid coupling to next-intl's complex generic.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function relativeTime(isoString: string, t: (key: string, values?: any) => string): string {
   const diff = Date.now() - new Date(isoString).getTime();
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t("time.justNow");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  if (minutes < 60) return t("time.minutesAgo", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (hours < 24) return t("time.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  return t("time.daysAgo", { count: days });
 }
+
+// ── Sub-components (PascalCase, module-level) ────────────────────────────────
+
+interface SectionCardProps {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  children: React.ReactNode;
+}
+
+/** Collapsible card with Icon + title header. Default-open (AC per design). */
+function SectionCard({ id, icon: IconComp, title, children }: SectionCardProps) {
+  const [open, setOpen] = React.useState(true);
+  return (
+    <div id={id} style={s.sectionWrap}>
+      <Card pad={false} style={s.cardClip}>
+        <button
+          type="button"
+          style={open ? s.cardHeaderOpen : s.cardHeaderClosed}
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          <IconComp size={16} style={s.cardIcon} />
+          <span style={s.cardTitle}>{title}</span>
+          {open
+            ? <Icon.ChevronDown size={14} style={s.chevron} />
+            : <Icon.ChevronRight size={14} style={s.chevron} />}
+        </button>
+        {open && <div style={s.cardBody}>{children}</div>}
+      </Card>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 interface Props {
   repoId: string;
@@ -44,6 +94,7 @@ export function OnboardingTour({ repoId }: Props) {
   const generate = useGenerateTour(repoId);
   const toast = useToast();
   const [copied, setCopied] = React.useState(false);
+  const [copiedIdx, setCopiedIdx] = React.useState<number | null>(null);
 
   // F4: detect in-progress dedup response → info toast (not an error)
   React.useEffect(() => {
@@ -61,7 +112,7 @@ export function OnboardingTour({ repoId }: Props) {
     return <Skeleton height={400} />;
   }
 
-  // State C: clone_path absent — direct user to clone, no Generate/Regenerate button (AC-8)
+  // State C: clone_path absent — direct user to clone, no Generate button (AC-8)
   if (!activeRepo?.clone_path) {
     return (
       <ErrorState
@@ -82,7 +133,6 @@ export function OnboardingTour({ repoId }: Props) {
     );
   }
 
-  // Loading tour data
   if (isLoading) {
     return <Skeleton height={400} />;
   }
@@ -109,7 +159,7 @@ export function OnboardingTour({ repoId }: Props) {
   }
 
   // State A: tour exists (AC-6, AC-9, AC-10, AC-11, AC-12, AC-13, AC-14)
-  // badge when index was incomplete at generation time (AC-10, AC-11)
+
   const showBadge = INCOMPLETE_STATUSES.has(tourData.index_status_at_generation);
 
   const onShare = async () => {
@@ -117,6 +167,16 @@ export function OnboardingTour({ repoId }: Props) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const copyCommand = (cmd: string, idx: number) => {
+    navigator.clipboard.writeText(cmd);
+    setCopiedIdx(idx);
+    // Clear only this index after 2 s (ignore if another copy fired meanwhile)
+    setTimeout(() => setCopiedIdx((i) => (i === idx ? null : i)), 2000);
+  };
+
+  // By State C guard above, activeRepo is non-null and has full_name + default_branch
+  const githubBase = `https://github.com/${activeRepo.full_name}/blob/${activeRepo.default_branch}`;
 
   return (
     <div>
@@ -127,7 +187,7 @@ export function OnboardingTour({ repoId }: Props) {
           <p style={s.subtitle}>
             {t("subtitle", {
               filesIndexed: tourData.files_indexed,
-              timeAgo: relativeTime(tourData.generated_at),
+              timeAgo: relativeTime(tourData.generated_at, t),
             })}
           </p>
           {/* AC-10, AC-11: incomplete-index badge */}
@@ -148,7 +208,7 @@ export function OnboardingTour({ repoId }: Props) {
           >
             {copied ? t("actions.copied") : t("actions.shareLink")}
           </button>
-          {/* AC-14: regenerate button with loading spinner */}
+          {/* AC-14: regenerate button */}
           <Button
             kind="secondary"
             onClick={() => generate.mutate()}
@@ -177,52 +237,113 @@ export function OnboardingTour({ repoId }: Props) {
       </nav>
 
       {/* Section 1: Architecture Overview */}
-      <section id={SECTION_ARCHITECTURE} style={s.section}>
-        <h2 style={s.sectionHeading}>{t("sections.architectureOverview")}</h2>
+      <SectionCard
+        id={SECTION_ARCHITECTURE}
+        icon={Icon.Layers}
+        title={t("sections.architectureOverview")}
+      >
         <Markdown>{tourData.sections.architecture_overview}</Markdown>
-      </section>
+      </SectionCard>
 
-      {/* Section 2: Critical Paths */}
-      <section id={SECTION_CRITICAL_PATHS} style={s.section}>
-        <h2 style={s.sectionHeading}>{t("sections.criticalPaths")}</h2>
-        <Markdown>{tourData.sections.critical_paths}</Markdown>
-      </section>
+      {/* Section 2: Critical Paths — one row per {file, why} with Open link */}
+      <SectionCard
+        id={SECTION_CRITICAL_PATHS}
+        icon={Icon.Activity}
+        title={t("sections.criticalPaths")}
+      >
+        <div style={s.criticalList}>
+          {tourData.sections.critical_paths.map((item) => (
+            <div key={item.file} style={s.criticalRow}>
+              <code style={s.monoPath}>{item.file}</code>
+              <span style={s.criticalWhy}>{item.why}</span>
+              <a
+                href={`${githubBase}/${item.file}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={s.openLink}
+              >
+                {t("criticalPaths.openFile")}
+              </a>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
 
-      {/* Section 3: How to Run Locally + mandatory unverified-commands disclaimer (AC-12) */}
-      <section id={SECTION_HOW_TO_RUN} style={s.section}>
-        <h2 style={s.sectionHeading}>{t("sections.howToRunLocally")}</h2>
+      {/* Section 3: How to Run Locally — numbered rows + per-row copy (AC-12: disclaimer first) */}
+      <SectionCard
+        id={SECTION_HOW_TO_RUN}
+        icon={Icon.Command}
+        title={t("sections.howToRunLocally")}
+      >
         <div role="note" style={s.disclaimer}>
           {t("howToRun.disclaimer")}
         </div>
-        <Markdown>{tourData.sections.how_to_run_locally}</Markdown>
-      </section>
-
-      {/* Section 4: Guided Reading Path — rendered in server-provided order (AC-9) */}
-      <section id={SECTION_READING_PATH} style={s.section}>
-        <h2 style={s.sectionHeading}>{t("sections.readingPath")}</h2>
-        <ol style={s.readingList}>
-          {tourData.reading_path.map((item) => (
-            <li key={item.file} style={s.readingItem}>
-              <code style={s.monoPath}>{item.file}</code>
-              <span style={s.readingDesc}> — {item.description}</span>
-              {item.rank > 0 && (
-                <span style={s.rankBadge}>{Math.round(item.rank)}th percentile</span>
-              )}
+        <ol style={s.commandList}>
+          {tourData.sections.how_to_run_locally.map((cmd, idx) => (
+            <li key={idx} style={s.commandRow}>
+              <span style={s.commandNum}>{idx + 1}.</span>
+              <code style={s.monoCmd}>{cmd}</code>
+              <button
+                type="button"
+                aria-label={t("howToRun.copy")}
+                style={s.copyBtn}
+                onClick={() => copyCommand(cmd, idx)}
+              >
+                {copiedIdx === idx ? t("howToRun.copied") : t("howToRun.copy")}
+              </button>
             </li>
           ))}
         </ol>
-      </section>
+      </SectionCard>
+
+      {/* Section 4: Guided Reading Path — numbered rows in server-provided order (AC-9) */}
+      <SectionCard
+        id={SECTION_READING_PATH}
+        icon={Icon.ListChecks}
+        title={t("sections.readingPath")}
+      >
+        <ol style={s.readingList}>
+          {tourData.reading_path.map((item, idx) => (
+            <li key={item.file} style={s.readingItem}>
+              <span style={s.readingNum}>{idx + 1}.</span>
+              <code style={s.monoPath}>{item.file}</code>
+              {item.rank > 0 && (
+                <span style={s.rankBadge}>
+                  {t("readingPath.rank", { rank: Math.round(item.rank) })}
+                </span>
+              )}
+              <span style={s.readingDesc}>{item.description}</span>
+            </li>
+          ))}
+        </ol>
+      </SectionCard>
 
       {/* Section 5: First Tasks */}
-      <section id={SECTION_FIRST_TASKS} style={s.section}>
-        <h2 style={s.sectionHeading}>{t("sections.firstTasks")}</h2>
+      <SectionCard
+        id={SECTION_FIRST_TASKS}
+        icon={Icon.Sparkles}
+        title={t("sections.firstTasks")}
+      >
         <Markdown>{tourData.sections.first_tasks}</Markdown>
-      </section>
+      </SectionCard>
     </div>
   );
 }
 
 // ── Inline styles (module-level constants — not recreated per render) ──────────
+
+const cardHeaderBase: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  width: "100%",
+  padding: "12px 16px",
+  background: "none",
+  border: "none",
+  cursor: "pointer",
+  textAlign: "left",
+};
+
 const s = {
   emptyWrap: {
     display: "flex",
@@ -307,18 +428,40 @@ const s = {
     lineHeight: "1.7",
   } as React.CSSProperties,
 
-  section: {
-    marginBottom: 36,
+  // SectionCard styles
+  sectionWrap: {
+    marginBottom: 16,
     scrollMarginTop: 16,
   } as React.CSSProperties,
-  sectionHeading: {
-    fontSize: 16,
-    fontWeight: 650,
-    color: "var(--text-primary)",
-    margin: "0 0 12px",
-    paddingBottom: 8,
+  cardClip: {
+    overflow: "hidden",
+  } as React.CSSProperties,
+  // Header with separator (card open) — module-level constant, no per-render alloc
+  cardHeaderOpen: {
+    ...cardHeaderBase,
     borderBottom: "1px solid var(--border)",
   } as React.CSSProperties,
+  cardHeaderClosed: {
+    ...cardHeaderBase,
+  } as React.CSSProperties,
+  cardIcon: {
+    color: "var(--accent-text)",
+    flexShrink: 0,
+  } as React.CSSProperties,
+  cardTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: 650,
+    color: "var(--text-primary)",
+  } as React.CSSProperties,
+  chevron: {
+    color: "var(--text-muted)",
+    flexShrink: 0,
+  } as React.CSSProperties,
+  cardBody: {
+    padding: "16px",
+  } as React.CSSProperties,
+
   disclaimer: {
     fontSize: 12,
     lineHeight: 1.5,
@@ -330,17 +473,104 @@ const s = {
     marginBottom: 12,
   } as React.CSSProperties,
 
-  readingList: {
-    paddingLeft: 24,
+  // Critical paths
+  criticalList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  } as React.CSSProperties,
+  criticalRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  } as React.CSSProperties,
+  criticalWhy: {
+    flex: 1,
+    fontSize: 13,
+    color: "var(--text-muted)",
+    minWidth: 0,
+  } as React.CSSProperties,
+  openLink: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: "var(--accent-text)",
+    textDecoration: "none",
+    padding: "2px 8px",
+    borderRadius: 4,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+    flexShrink: 0,
+  } as React.CSSProperties,
+
+  // How to run
+  commandList: {
+    paddingLeft: 0,
     margin: 0,
+    listStyle: "none",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  } as React.CSSProperties,
+  commandRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  } as React.CSSProperties,
+  commandNum: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--text-muted)",
+    flexShrink: 0,
+    width: 20,
+  } as React.CSSProperties,
+  monoCmd: {
+    flex: 1,
+    fontFamily: "var(--font-mono, ui-monospace, SFMono-Regular, monospace)",
+    fontSize: "0.88em",
+    padding: "4px 8px",
+    borderRadius: 4,
+    background: "var(--bg-hover)",
+    color: "var(--text-primary)",
+  } as React.CSSProperties,
+  copyBtn: {
+    fontSize: 12,
+    fontWeight: 500,
+    padding: "3px 8px",
+    borderRadius: 4,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    flexShrink: 0,
+    minWidth: 52,
+    textAlign: "center",
+  } as React.CSSProperties,
+
+  // Reading path
+  readingList: {
+    paddingLeft: 0,
+    margin: 0,
+    listStyle: "none",
     display: "flex",
     flexDirection: "column",
     gap: 10,
   } as React.CSSProperties,
   readingItem: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 6,
+    flexWrap: "wrap",
     fontSize: 14,
     lineHeight: 1.5,
     color: "var(--text-primary)",
+  } as React.CSSProperties,
+  readingNum: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--text-muted)",
+    flexShrink: 0,
+    width: 20,
   } as React.CSSProperties,
   monoPath: {
     fontFamily: "var(--font-mono, ui-monospace, SFMono-Regular, monospace)",
@@ -352,10 +582,10 @@ const s = {
   } as React.CSSProperties,
   readingDesc: {
     color: "var(--text-secondary)",
+    flex: 1,
   } as React.CSSProperties,
   rankBadge: {
     display: "inline-block",
-    marginLeft: 8,
     fontSize: 11,
     color: "var(--text-muted)",
     background: "var(--bg-elevated)",
@@ -363,5 +593,6 @@ const s = {
     borderRadius: 4,
     padding: "1px 5px",
     verticalAlign: "middle",
+    flexShrink: 0,
   } as React.CSSProperties,
 };
