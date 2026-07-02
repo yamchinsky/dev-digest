@@ -24,6 +24,11 @@ non-OpenRouter model means adding its id to `pricing.ts`, and the key must
 match the string persisted in `agent_runs.model` exactly (whatever the
 provider passes to `estimateCost`), or the fallback still misses.
 
+### The missing-context-doc "warn" is logged as `kind: "info"` with a literal `[warn]` prefix in the message
+_2026-07-02_ · `server/src/modules/reviews/run-executor.ts:297`
+
+SPEC-01 AC-16 says a missing attached doc "SHALL log a `warn` entry", but the run-log entry is emitted via `runLog.info(`[warn] Context doc missing: …`)` — the structured `kind` field stays `"info"`; the warn-ness lives only in the message text. Any test or log filter that matches `kind === "warn"` finds nothing (bit me during live AC-16 verification — filter by msg substring instead). If a real `runLog.warn` level ever lands, migrate this call; until then, assert on the message prefix, not the kind.
+
 ## Codebase Patterns
 
 ### Compute run cost on read; never persist it

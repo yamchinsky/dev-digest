@@ -8,9 +8,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
-  Badge,
   Button,
-  Checkbox,
   TextInput,
   SelectInput,
   Textarea,
@@ -21,7 +19,7 @@ import {
   Skeleton,
   Icon,
 } from "@devdigest/ui";
-import type { ContextDoc, Skill, SkillType } from "@devdigest/shared";
+import type { Skill, SkillType } from "@devdigest/shared";
 import { AppShell } from "@/components/app-shell";
 import {
   useSkill,
@@ -30,11 +28,6 @@ import {
   useDeleteSkill,
   useToggleSkillEnabled,
 } from "@/lib/hooks/skills";
-import {
-  useWorkspaceContextDocs,
-  useSkillContextDocs,
-  useSetSkillContextDocs,
-} from "@/lib/hooks";
 import { s } from "./styles";
 
 type Mode = "create" | "edit";
@@ -53,153 +46,8 @@ const EMPTY = {
   body: "",
 };
 
-// Category badge colors: specs → blue, docs → green, insights → amber
-const CATEGORY_COLORS: Record<string, { color: string; bg: string }> = {
-  specs: { color: "#2563eb", bg: "#eff6ff" },
-  docs: { color: "#16a34a", bg: "#f0fdf4" },
-  insights: { color: "#d97706", bg: "#fffbeb" },
-};
-
 function approxTokens(body: string): number {
   return Math.max(1, Math.round(body.length / 4));
-}
-
-function CategoryBadge({ category }: { category: string }) {
-  const c = CATEGORY_COLORS[category] ?? { color: "var(--text-secondary)", bg: "var(--bg-hover)" };
-  return <Badge color={c.color} bg={c.bg}>{category}</Badge>;
-}
-
-// ---------------------------------------------------------------------------
-// SkillContextSection — "Context docs" block rendered in edit mode only.
-// All data is fetched via hooks; no raw fetch calls; no useMemo (arrays are
-// small, derivations are cheap). Filter is purely client-side (AC-11).
-// ---------------------------------------------------------------------------
-
-interface SkillContextSectionProps {
-  skillId: string;
-}
-
-function SkillContextSection({ skillId }: SkillContextSectionProps) {
-  const t = useTranslations("skills");
-  const [filter, setFilter] = React.useState("");
-
-  const { data: allDocs = [] } = useWorkspaceContextDocs();
-  const { data: skillDocs = [] } = useSkillContextDocs(skillId);
-  const setDocs = useSetSkillContextDocs(skillId);
-
-  // O(1) attachment lookup — derived inline (small array, no memoization needed)
-  const attachedKeySet = new Set(skillDocs.map((d) => `${d.repo_id}:${d.relative_path}`));
-  const isAttached = (doc: ContextDoc) =>
-    attachedKeySet.has(`${doc.repo_id}:${doc.relative_path}`);
-
-  // Client-side filter — no API call (AC-11)
-  const filteredDocs = filter.trim()
-    ? allDocs.filter((d) => d.relative_path.includes(filter))
-    : allDocs;
-
-  // Attached docs in workspace order — used for mutation payload and SERIALIZES AS
-  const attachedDocs = allDocs.filter(isAttached);
-
-  // AC-12: send full flat set on every toggle
-  function handleToggle(doc: ContextDoc) {
-    const docKey = `${doc.repo_id}:${doc.relative_path}`;
-    const next = isAttached(doc)
-      ? attachedDocs.filter((d) => `${d.repo_id}:${d.relative_path}` !== docKey)
-      : [...attachedDocs, doc];
-    setDocs.mutate({ items: next.map((d) => ({ path: d.relative_path, repo_id: d.repo_id })) });
-  }
-
-  // AC-13: client-side derivation only — no API call
-  const serializesText =
-    "## Project context" +
-    (attachedDocs.length > 0
-      ? "\n" + attachedDocs.map((d) => `• ${d.relative_path}`).join("\n")
-      : "");
-
-  return (
-    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 20, marginTop: 4, marginBottom: 4 }}>
-      {/* Heading + "N attached" chip */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
-          {t("contextSection.heading")}
-        </span>
-        <Badge>{t("contextSection.nAttached", { count: attachedDocs.length })}</Badge>
-      </div>
-
-      {/* Path filter — client-side only */}
-      <div style={{ marginBottom: 10 }}>
-        <TextInput
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("contextSection.filterPlaceholder")}
-        />
-      </div>
-
-      {/* Checkbox list */}
-      {allDocs.length === 0 ? (
-        <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "8px 0" }}>
-          {t("contextSection.empty")}
-        </p>
-      ) : (
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}
-        >
-          {filteredDocs.map((doc) => (
-            <div
-              key={`${doc.repo_id}:${doc.relative_path}`}
-              style={{ display: "flex", alignItems: "center", gap: 10 }}
-            >
-              <Checkbox checked={isAttached(doc)} onChange={() => handleToggle(doc)} />
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 12,
-                  flex: 1,
-                  color: "var(--text-primary)",
-                  wordBreak: "break-all",
-                }}
-              >
-                {doc.relative_path}
-              </span>
-              <CategoryBadge category={doc.category} />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* SERIALIZES AS — pre-formatted prompt preview, client-derived (AC-13) */}
-      <div style={{ marginTop: 14 }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: "var(--text-muted)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            marginBottom: 6,
-          }}
-        >
-          {t("contextSection.serializesAs")}
-        </div>
-        <pre
-          style={{
-            margin: 0,
-            padding: "10px 12px",
-            borderRadius: 7,
-            border: "1px solid var(--border-strong)",
-            background: "var(--bg-elevated)",
-            fontSize: 12,
-            fontFamily: "var(--font-mono)",
-            color: "var(--text-secondary)",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-all",
-          }}
-        >
-          {serializesText}
-        </pre>
-      </div>
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -352,9 +200,6 @@ export function SkillEditor({ mode, skillId }: Props) {
                 </div>
               )}
             </FormField>
-
-            {/* Context docs section — edit mode only (skill must exist to have an ID) */}
-            {isEdit && existing && <SkillContextSection skillId={existing.id} />}
 
             <div style={s.footer}>
               {isEdit && (

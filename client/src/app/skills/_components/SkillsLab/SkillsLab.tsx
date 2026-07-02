@@ -35,19 +35,21 @@ import {
 import { SkillCard } from "../SkillCard";
 import { ImportSkillDialog } from "../ImportSkillDialog";
 import { ConfigTab } from "../SkillDetail/ConfigTab";
+import { ContextTab } from "../SkillDetail/ContextTab";
 import { PreviewTab } from "../SkillDetail/PreviewTab";
 import { VersionsTab } from "../SkillDetail/VersionsTab";
 import { StatsTab } from "../SkillDetail/StatsTab";
 import { filterSkills, typeColor } from "../SkillsListView/helpers";
 import { s } from "./styles";
 
-const VALID_TABS = ["config", "preview", "stats", "versions"] as const;
+const VALID_TABS = ["config", "context", "preview", "stats", "versions"] as const;
 type TabKey = (typeof VALID_TABS)[number];
 
-// Design order: Config | Preview | Stats | Versions (Evals tab from the
-// design is intentionally omitted — agreed to skip eval in this iteration).
+// Design order: Config | Context | Preview | Stats | Versions (Evals tab from
+// the design is intentionally omitted — agreed to skip eval in this iteration).
 const TAB_DEFS = [
   { key: "config", label: "Config", icon: "Settings" as const },
+  { key: "context", label: "Context", icon: "FileText" as const },
   { key: "preview", label: "Preview", icon: "Eye" as const },
   { key: "stats", label: "Stats", icon: "BarChart" as const },
   { key: "versions", label: "Versions", icon: "History" as const },
@@ -241,6 +243,7 @@ function DetailPane({
       </div>
       <div style={s.detailBody}>
         {tab === "config" && <ConfigTab skill={skill} onDelete={onDelete} />}
+        {tab === "context" && <ContextTab skill={skill} />}
         {tab === "preview" && <PreviewTab skill={skill} />}
         {tab === "versions" && <VersionsTab skill={skill} />}
         {tab === "stats" && <StatsTab skill={skill} />}
