@@ -202,11 +202,15 @@ export class OnboardingTourService {
         description: descMap.get(file) ?? '',
       }));
 
-      // Sections (four prose sections — reading_path is stored separately)
+      // Sections (four prose sections — reading_path is stored separately).
+      // Blank command entries are dropped here (schema tolerates them so one
+      // "" from the model doesn't fail the whole response).
       const sections: OnboardingTourSections = {
         architecture_overview: result.data.architecture_overview,
         critical_paths: result.data.critical_paths,
-        how_to_run_locally: result.data.how_to_run_locally,
+        how_to_run_locally: result.data.how_to_run_locally.filter(
+          (cmd) => cmd.trim().length > 0,
+        ),
         first_tasks: result.data.first_tasks,
       };
 
