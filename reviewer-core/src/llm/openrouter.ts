@@ -112,7 +112,11 @@ export class OpenRouterProvider implements LLMProvider {
       messages.push({ role: 'assistant', content: lastRaw });
       messages.push({ role: 'user', content: parsed.repromptMessage });
     }
-    throw new Error(`OpenRouter structured output failed schema validation for ${req.schemaName}`);
+    // Include a bounded tail of the last raw response — without it, schema
+    // failures are undiagnosable (bit us on the first onboarding-tour run).
+    throw new Error(
+      `OpenRouter structured output failed schema validation for ${req.schemaName}; last raw (${lastRaw.length} chars): ${lastRaw.slice(0, 300)}`,
+    );
   }
 
   /**
