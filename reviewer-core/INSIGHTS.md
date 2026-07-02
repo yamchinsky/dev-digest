@@ -9,7 +9,11 @@ bug or making a "looks obvious" decision in `reviewer-core/`.
 _None yet._
 
 ## What Doesn't Work
-_None yet._
+
+### OpenRouter `json_schema, strict: true` is advisory for some models — enforce shape via the prompt, not the schema
+_2026-07-02_ · `src/llm/openrouter.ts` (`completeStructured`), bit us in `server/src/modules/onboarding-tours/service.ts`
+
+For models where OpenRouter has no constrained-decoding backend (hit with `deepseek/deepseek-v4-flash`), `response_format: { json_schema, strict: true }` buys valid JSON but NOT the schema: the model returned an object containing only `reading_path` despite five `required` fields, and `minLength` was never enforced (empty strings came back freely). Three consequences, learned on SPEC-02's first live generation, all fixed in cd5a118: (1) the user prompt must enumerate every required field explicitly — a trailing instruction about ONE field makes the model answer with only that field; (2) don't put `min(1)` on LLM-schema strings you can tolerate empty — one `""` fails the whole response after retries; (3) a too-low `max_tokens` surfaces as the SAME "failed schema validation" error (truncated JSON), so bump tokens before blaming the schema. The throw now carries a bounded tail of the raw response — keep that; the failure is undiagnosable without it.
 
 ## Codebase Patterns
 
