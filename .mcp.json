@@ -2,7 +2,7 @@
   "mcpServers": {
     "devdigest": {
       "command": "bash",
-      "args": ["scripts/mcp.sh"],
+      "args": ["-c", "exec bash \"$(git rev-parse --show-toplevel)/scripts/mcp.sh\""],
       "env": {
         "DEVDIGEST_API_URL": "http://localhost:3001"
       }

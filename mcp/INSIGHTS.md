@@ -12,7 +12,9 @@ _None yet._
 ### Inlining `tsx src/index.ts` in `.mcp.json` breaks @devdigest path-alias resolution
 _2026-06-30_ · `.mcp.json`, `scripts/mcp.sh`
 
-The committed project `.mcp.json` must launch via a **relative** path to `scripts/mcp.sh` — Claude Code spawns project-scoped MCP servers with cwd = repo root, so an absolute path (`/Users/.../scripts/mcp.sh`) only works on the author's machine. Do NOT "simplify" the launcher to a bare `tsx src/index.ts`: tsx must run with cwd = `mcp/` to load `mcp/tsconfig.json` and resolve the `@devdigest/shared` and `@devdigest/reviewer-core` path aliases, so the script's `cd "$ROOT/mcp"` before `exec` is load-bearing (as is its on-demand `npm ci`/`npm install`). Keep the script; only make the path in `.mcp.json` relative.
+The committed project `.mcp.json` must NOT hardcode an absolute path to `scripts/mcp.sh` (`/Users/.../scripts/mcp.sh` only works on the author's machine). Do NOT "simplify" the launcher to a bare `tsx src/index.ts` either: tsx must run with cwd = `mcp/` to load `mcp/tsconfig.json` and resolve the `@devdigest/shared` and `@devdigest/reviewer-core` path aliases, so the script's `cd "$ROOT/mcp"` before `exec` is load-bearing (as is its on-demand `npm ci`/`npm install`). Keep the script.
+
+**Update 2026-07-02:** a bare relative path (`scripts/mcp.sh`) is ALSO wrong — Claude Code spawns project-scoped MCP servers with cwd = the **session's working directory**, not the repo root. A session started in `client/` failed to connect (`-32000`: `bash: scripts/mcp.sh: No such file or directory`). The portable launcher resolves the root at spawn time: `bash -c 'exec bash "$(git rev-parse --show-toplevel)/scripts/mcp.sh"'` — works from any cwd inside the repo, no hardcoded user path.
 
 ## Codebase Patterns
 _None yet._
