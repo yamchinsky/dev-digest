@@ -56,6 +56,11 @@ Strings that mirror what the LLM actually receives (e.g. the `## Project context
 
 ## Tool & Library Notes
 
+### `(["a","b"] as const).includes(x)` rejects a wider union — use `new Set([...]).has(x)` for subset checks
+_2026-07-02_ · `src/app/repos/[repoId]/onboarding-tour/_components/OnboardingTour/OnboardingTour.tsx` (`INCOMPLETE_STATUSES`)
+
+TypeScript types a const tuple's `.includes()` parameter as the tuple's own literal union, so checking a value typed as a WIDER union (e.g. `"full" | "partial" | "degraded" | "failed"` against `["partial","degraded","failed"] as const`) is a compile error, not a runtime question. `new Set(["partial","degraded","failed"]).has(x)` compiles and reads the same. Recurs in any "badge visible for a subset of enum values" UI pattern driven by shared-contract enums.
+
 ### A `<button>` whose only child is an icon-only `SeverityBadge` is invisible to `getByRole("button", { name })`
 _2026-06-28_ · `src/components/diff-viewer/CodeLine/CodeLine.tsx` (in-line finding badges), `SmartDiffViewer.test.tsx`
 

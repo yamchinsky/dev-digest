@@ -1,0 +1,34 @@
+{
+  "title": "Onboarding Tour",
+  "subtitle": "Generated from index of {filesIndexed} files · last refreshed {timeAgo}",
+  "incompleteBadge": "Generated from an incomplete index — Resync and Regenerate for a fuller tour.",
+  "noClonePath": {
+    "title": "Repository not cloned",
+    "body": "Clone this repository via Settings to generate an onboarding tour."
+  },
+  "empty": {
+    "title": "No onboarding tour yet",
+    "body": "Generate a five-section tour from the repository's indexed structure."
+  },
+  "error": {
+    "title": "Could not load tour",
+    "body": "Unexpected error — click retry or reload the page."
+  },
+  "inProgress": "Generation already running — refresh shortly.",
+  "sections": {
+    "architectureOverview": "Architecture Overview",
+    "criticalPaths": "Critical Paths",
+    "howToRunLocally": "How to Run Locally",
+    "readingPath": "Guided Reading Path",
+    "firstTasks": "First Tasks"
+  },
+  "howToRun": {
+    "disclaimer": "These commands are LLM-inferred from the repository structure and have not been verified by execution. Always review before running."
+  },
+  "actions": {
+    "generate": "Generate",
+    "regenerate": "Regenerate",
+    "shareLink": "Share link",
+    "copied": "Copied!"
+  }
+}
