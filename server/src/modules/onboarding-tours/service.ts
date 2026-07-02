@@ -1,11 +1,11 @@
 import { INJECTION_GUARD, wrapUntrusted } from '@devdigest/reviewer-core';
 import {
-  TourLLMSchema,
   type OnboardingTour,
   type GenerationLog,
   type OnboardingTourSections,
   type ReadingPathItem,
 } from '@devdigest/shared';
+import { TourLLMSchema } from './helpers.js';
 import type { Container } from '../../platform/container.js';
 import {
   NotFoundError,
@@ -14,7 +14,6 @@ import {
   ConfigError,
 } from '../../platform/errors.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
-import { DEFAULT_REPO_MAP_TOKEN_BUDGET } from '../repo-intel/constants.js';
 import { RepoRepository } from '../repos/repository.js';
 import { OnboardingTourRepository } from './repository.js';
 
@@ -95,7 +94,8 @@ export class OnboardingTourService {
       // Step 6: Gather repo-intel facts in parallel
       const [indexState, repoMapResult, criticalPaths, topFiles] = await Promise.all([
         this.container.repoIntel.getIndexState(repoId),
-        this.container.repoIntel.getRepoMap(repoId, DEFAULT_REPO_MAP_TOKEN_BUDGET),
+        // Budget defaults inside repo-intel — don't import its constants here.
+        this.container.repoIntel.getRepoMap(repoId),
         this.container.repoIntel.getCriticalPaths(repoId),
         this.container.repoIntel.getTopFilesByRank(repoId, TOP_FILES_N),
       ]);
@@ -117,7 +117,7 @@ export class OnboardingTourService {
       // Step 9: LLM adapter resolution
       let llm;
       try {
-        llm = await this.container.llm(provider as 'openai' | 'anthropic' | 'openrouter');
+        llm = await this.container.llm(provider);
       } catch (err) {
         // ConfigError = operator misconfiguration; re-throw as-is → 500
         if (err instanceof ConfigError) throw err;

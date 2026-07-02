@@ -1,27 +1,9 @@
 import { z } from 'zod';
 
-/**
- * Five-section schema expected from the LLM's structured call.
- * Server-internal (used in `completeStructured`); included here so it can be
- * imported by the service without reaching into reviewer-core internals.
- *
- * NOTE: `rank` is NOT in the LLM schema — it is injected server-side from
- * getFileRank() after the LLM call. Do not add a `rank` field here or the
- * structured-output contract will expect the model to supply it.
- */
-export const TourLLMSchema = z.object({
-  architecture_overview: z.string().min(1),
-  critical_paths: z.string().min(1),
-  how_to_run_locally: z.string().min(1),
-  // description is intentionally NOT min(1): providers' constrained decoding
-  // ignores minLength, and models leave "" for unfamiliar (vendored/generated)
-  // files — a hard min fails the whole response; the service falls back to ''.
-  reading_path: z.array(
-    z.object({ file: z.string().min(1), description: z.string() }),
-  ),
-  first_tasks: z.string().min(1),
-});
-export type TourLLMSchema = z.infer<typeof TourLLMSchema>;
+// NOTE: the LLM-response decoder (TourLLMSchema) is intentionally NOT here —
+// it is a server-internal adapter artifact and lives in
+// `server/src/modules/onboarding-tours/helpers.ts`. This file holds only the
+// domain contracts the client consumes.
 
 /** Four prose sections persisted in onboarding_tours.sections. */
 export const OnboardingTourSections = z.object({
