@@ -1,6 +1,7 @@
 import type { Container } from '../../platform/container.js';
 import type {
   Agent,
+  AgentContextDoc,
   AgentSkillLink,
   AgentVersion,
   CiFailOn,
@@ -8,7 +9,10 @@ import type {
   Provider,
   ReviewStrategy,
 } from '@devdigest/shared';
+import { ValidationError } from '../../platform/errors.js';
+import { discoverContextDocs } from '../workspace/discovery.js';
 import { AgentsRepository } from './repository.js';
+import { RepoRepository } from '../repos/repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
 
 /**
@@ -50,9 +54,11 @@ export interface UpdateAgentInput {
 
 export class AgentsService {
   private repo: AgentsRepository;
+  private repoRepo: RepoRepository;
 
   constructor(private container: Container) {
     this.repo = new AgentsRepository(container.db);
+    this.repoRepo = new RepoRepository(container.db);
   }
 
   async list(workspaceId: string): Promise<Agent[]> {
@@ -182,5 +188,65 @@ export class AgentsService {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Context docs assigned to an agent, ordered. Returns undefined when the agent
+   * doesn't exist in this workspace (route maps undefined → 404).
+   */
+  async getContextDocs(
+    workspaceId: string,
+    agentId: string,
+  ): Promise<AgentContextDoc[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    return this.repo.getContextDocs(agentId);
+  }
+
+  /**
+   * Atomically replace the context-doc set for an agent.
+   *
+   * 1. Verifies agent belongs to workspace (→ undefined on mismatch, route → 404).
+   * 2. Fetches repos for the workspace and runs filesystem discovery.
+   * 3. Validates every requested (repoId, path) pair against the discovered set;
+   *    throws ValidationError (code: INVALID_CONTEXT_DOC_PATH) if any is missing —
+   *    no partial persist.
+   * 4. Delegates to repo.replaceContextDocs (single transaction, order = array index).
+   */
+  async replaceContextDocs(
+    workspaceId: string,
+    agentId: string,
+    items: Array<{ repo_id: string; path: string }>,
+  ): Promise<AgentContextDoc[] | undefined> {
+    // 1. Ownership check
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+
+    // 2. Repos for this workspace (id + clone_path for discovery)
+    const repos = await this.repoRepo.list(workspaceId);
+
+    // 3. Discover valid context docs via filesystem utility (not WorkspaceService —
+    //    avoids cross-service imports and circular dependency risk)
+    const discovered = await discoverContextDocs(
+      repos.map((r) => ({ repoId: r.id, clonePath: r.clonePath })),
+    );
+    const validSet = new Set(discovered.map((d) => `${d.repoId}:${d.relativePath}`));
+
+    // 4. All-or-nothing validation: reject before any DB write if any path is invalid
+    const firstInvalid = items.find((it) => !validSet.has(`${it.repo_id}:${it.path}`));
+    if (firstInvalid) {
+      throw new ValidationError('One or more context doc paths are not valid for this workspace', {
+        code: 'INVALID_CONTEXT_DOC_PATH',
+        path: `${firstInvalid.repo_id}:${firstInvalid.path}`,
+      });
+    }
+
+    // 5. Atomic replace; order = array index
+    await this.repo.replaceContextDocs(
+      agentId,
+      items.map((it, i) => ({ repoId: it.repo_id, relativePath: it.path, order: i })),
+    );
+
+    return this.repo.getContextDocs(agentId);
   }
 }

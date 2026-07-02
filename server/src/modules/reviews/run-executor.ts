@@ -1,10 +1,14 @@
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Container } from '../../platform/container.js';
 import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
-import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
-import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
+import type { ReviewRepository, FindingRow, PullRow, ReviewRow, RepoRow } from './repository.js';
+import { SkillsRepository } from '../skills/repository.js';
+import { RepoRepository } from '../repos/repository.js';
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
@@ -42,11 +46,17 @@ export type RunOutcome = {
  * review. Per-agent failures are isolated.
  */
 export class ReviewRunExecutor {
+  private readonly skills: SkillsRepository;
+  private readonly repoRepo: RepoRepository;
+
   constructor(
     private container: Container,
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
-  ) {}
+  ) {
+    this.skills = new SkillsRepository(container.db);
+    this.repoRepo = new RepoRepository(container.db);
+  }
 
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
@@ -56,7 +66,7 @@ export class ReviewRunExecutor {
   async executeRuns(
     workspaceId: string,
     pull: PullRow,
-    repo: typeof schema.repos.$inferSelect,
+    repo: RepoRow,
     jobs: { agent: AgentRow; runId: string }[],
     logger?: Logger,
   ): Promise<void> {
@@ -179,7 +189,7 @@ export class ReviewRunExecutor {
   private async runOneAgent(
     workspaceId: string,
     pull: PullRow,
-    repo: typeof schema.repos.$inferSelect,
+    repo: RepoRow,
     diff: UnifiedDiff,
     agent: AgentRow,
     runId: string,
@@ -205,6 +215,11 @@ export class ReviewRunExecutor {
     if (skillNames.length > 0) {
       runLog.info(`Skills attached: ${skillNames.join(', ')}`);
     }
+
+    // Declared before the try so the failure/cancel trace can include whatever
+    // was collected before the error occurred (satisfies AC-18 on the failure path).
+    const specsContents: string[] = [];
+    const specsReadPaths: string[] = [];
 
     try {
       // Resolve the agent's LLM provider. (container.llm throws if the provider
@@ -237,6 +252,65 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // ---- Context-doc injection (T6) ----------------------------------------
+      // 1. Agent-level context docs (ordered by `order` ASC).
+      const agentDocPaths = await this.agents.getContextDocPaths(agent.id).catch(() => []);
+
+      // 2. Skill-level context docs, in skill-link order (one list per active skill).
+      const skillDocPathsNested = await Promise.all(
+        activeSkills.map((l) => this.skills.getContextDocPaths(l.skill.id).catch(() => [])),
+      );
+
+      // 3. Merge + dedup: agent docs first (order-preserved), then skill docs in
+      //    skill-link order. Dedup key = `${repoId}:${relativePath}`; first
+      //    (agent-level) occurrence wins (AC-14 combined agent + skill docs edge case).
+      const seen = new Set<string>();
+      const mergedDocs: Array<{ repoId: string; relativePath: string }> = [];
+      for (const d of agentDocPaths) {
+        const key = `${d.repoId}:${d.relativePath}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          mergedDocs.push(d);
+        }
+      }
+      for (const skillPaths of skillDocPathsNested) {
+        for (const d of skillPaths) {
+          const key = `${d.repoId}:${d.relativePath}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            mergedDocs.push(d);
+          }
+        }
+      }
+
+      if (mergedDocs.length > 0) {
+        // 4. Batch-fetch clone paths: ONE query for all unique repoIds (not per-doc).
+        const uniqueRepoIds = [...new Set(mergedDocs.map((d) => d.repoId))];
+        const repoRows = await this.repoRepo.getClonePathsByIds(uniqueRepoIds);
+        const clonePathById = new Map(repoRows.map((r) => [r.id, r.clonePath]));
+
+        // 5. Read files in merge order; gracefully handle missing and empty cases.
+        for (const doc of mergedDocs) {
+          const clonePath = clonePathById.get(doc.repoId) ?? null;
+          if (!clonePath || !existsSync(join(clonePath, doc.relativePath))) {
+            // Null clone path OR file absent from disk: warn in run log, skip (AC-16).
+            runLog.info(`[warn] Context doc missing: ${doc.relativePath}`);
+            continue;
+          }
+          const content = await readFile(join(clonePath, doc.relativePath), 'utf8');
+          if (content.length === 0) {
+            // 0-byte file: silently skip — no log entry, no prompt block (NC-3).
+            continue;
+          }
+          specsContents.push(content);
+          specsReadPaths.push(doc.relativePath);
+        }
+
+        if (specsReadPaths.length > 0) {
+          runLog.info(`Context docs injected: ${specsReadPaths.join(', ')}`);
+        }
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -252,6 +326,9 @@ export class ReviewRunExecutor {
         // A1 — bound skills as ordered rule blocks. assemblePrompt omits the
         // `## Skills / rules` section when this is empty/undefined.
         ...(skillBodies.length > 0 ? { skills: skillBodies } : {}),
+        // T6 — project context docs injected as `## Project context` (untrusted-wrapped).
+        // assemblePrompt omits the section when this is empty/undefined.
+        ...(specsContents.length > 0 ? { specs: specsContents } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -340,7 +417,7 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        specs_read: specsReadPaths,
         skills_loaded: skillNames,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
@@ -372,7 +449,7 @@ export class ReviewRunExecutor {
       await this.repo
         .saveRunTrace(
           runId,
-          this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start, skillBodies, skillNames),
+          this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start, skillBodies, skillNames, specsReadPaths),
         )
         .catch(() => undefined);
       this.container.runBus.complete(runId);
@@ -496,6 +573,7 @@ export class ReviewRunExecutor {
     durationMs = 0,
     skillBodies: string[] = [],
     skillNames: string[] = [],
+    specsReadPaths: string[] = [],
   ): RunTrace {
     return {
       config: {
@@ -517,7 +595,7 @@ export class ReviewRunExecutor {
       tool_calls: [],
       raw_output: '',
       memory_pulled: [],
-      specs_read: [],
+      specs_read: specsReadPaths,
       skills_loaded: skillNames,
       log: this.container.runBus.buffer(runId).map((e) => ({ t: e.t, kind: e.kind, msg: e.msg })),
     };

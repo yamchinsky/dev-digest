@@ -13,8 +13,8 @@ import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
  * composes them so its public API stays identical.
  */
 
-import type { FindingRow, PullRow } from '../../db/rows.js';
-export type { FindingRow, PullRow };
+import type { FindingRow, PullRow, RepoRow } from '../../db/rows.js';
+export type { FindingRow, PullRow, RepoRow };
 
 export type ReviewRow = typeof t.reviews.$inferSelect;
 
@@ -31,7 +31,7 @@ export class ReviewRepository {
     return pullRepo.getPull(this.db, workspaceId, prId);
   }
 
-  getRepo(repoId: string): Promise<typeof t.repos.$inferSelect | undefined> {
+  getRepo(repoId: string): Promise<RepoRow | undefined> {
     return pullRepo.getRepo(this.db, repoId);
   }
 

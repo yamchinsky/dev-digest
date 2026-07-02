@@ -62,7 +62,8 @@ only sub-folder is `docs/agent-prompts/` (above); cross-module deep dives
 land here as they get written.
 
 **Read `specs/`** when you touch a contract or fixture shared across
-packages. Module-owned specs live under `<module>/specs/`.
+packages, or a cross-module SDD feature spec (`SPEC-NN-*.md`, written by the
+`spec-creator` agent). Module-owned specs live under `<module>/specs/`.
 
 **Read `INSIGHTS.md`** before solving a non-obvious bug or making a "looks
 obvious" decision — durable, repo-wide surprises that already bit us once.
@@ -119,6 +120,9 @@ Auto-load by trigger description; nothing to invoke manually.
 - `onion-architecture` — backend layering for `server/` + `reviewer-core/`: the `routes.ts` / `service.ts` / `repository.ts` triple, port placement in `@devdigest/shared`, `reviewer-core` purity invariants. Fires on backend edits, "where does this go" questions, and PR review of backend changes.
 - `frontend-architecture` — folder structure and code organization for `client/` (React + Next.js App Router).
 - `engineering-insights` — appends non-obvious findings to the right `INSIGHTS.md` (see *Session context* above).
-- `pr-self-review` — local pre-PR gate; runs the current diff through relevant skills and blocks `gh pr create` / `git push` on at least one CRITICAL finding.
-- `plan-verifier` — requirement-coverage checker; fires on "verify the plan", "did we cover all requirements", "requirement coverage", "check plan against code". Maps every R-ID + acceptance criterion in a `docs/plans/<feature>.md` to concrete evidence and emits a coverage matrix.
+- `pr-self-review` — local pre-PR gate; runs the current diff through relevant skills and blocks `gh pr create` on at least one CRITICAL finding (plain `git push` flows freely — the gate fires at PR-open time only).
+- `plan-verifier` — requirement-coverage checker; fires on "verify the plan", "did we cover all requirements", "requirement coverage", "check plan against code". Maps every R-ID + acceptance criterion in a `docs/plans/<feature>.md` to concrete evidence and emits a coverage matrix; cross-checks spec ACs when the plan names a SPEC-NN.
+- `impl` — SDD execution orchestrator; fires on "/impl", "імплементуй план", "run the plan", "виконай план". Executes a `docs/plans/<feature>.md` end-to-end in the main session: feature branch → implementer waves per the task DAG → plan-verifier coverage gate (first, in a sonnet subagent) → architecture-reviewer + arch-fix loop (≤3 iterations, to APPROVE) → spec status flip → `gh pr create` (the pr-self-review hook fires there). Specs (`spec-creator`) and plans (`implementation-planner`) are authored manually upstream; the `test-writer` agent is currently disabled — test intents land in the run's manual checklist.
+- `workflow-retro` — manual retrospective of a multi-agent run; fires on "workflow retro", "ретро прогону", "/workflow-retro". Deep mode reads subagent journals from disk (parent usage undercounts them), emits token/tool/duration/parallelism metrics + concrete recommendations, appends a trend row to `docs/retros/ledger.md`. Never hook-fired.
 - `doc-writer` — documentation authoring skill; fires on "write docs for", "document this feature", "turn this plan into docs", "add a diagram", "where should this doc go". Selects the correct Diátaxis type, places the doc in the right repo location, and embeds Mermaid diagrams with captions.
+- `spec-creator` is now an **agent** (`.claude/agents/spec-creator.md`), not a skill: SDD feature-spec author upstream of `implementation-planner`; grounds via devdigest-mcp, interviews via stop-and-return rounds, writes `SPEC-NN-*.md` only into `specs/` folders.

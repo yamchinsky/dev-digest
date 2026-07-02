@@ -3,15 +3,18 @@ import type {
   ImportCommitBody,
   ImportPreviewItem,
   Skill,
+  SkillContextDoc,
   SkillSource,
   SkillStats,
   SkillType,
   SkillVersion,
 } from '@devdigest/shared';
 import { SkillsRepository } from './repository.js';
+import { RepoRepository } from '../repos/repository.js';
 import { toSkillDto } from './helpers.js';
 import { previewImport, ImportError } from './import.js';
-import { ValidationError } from '../../platform/errors.js';
+import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
+import { discoverContextDocs } from '../workspace/discovery.js';
 
 /**
  * A1 — skills service. Business logic for the Skills page + import flow.
@@ -46,9 +49,11 @@ export interface ImportPreviewInput {
 
 export class SkillsService {
   private repo: SkillsRepository;
+  private repoRepo: RepoRepository;
 
   constructor(private container: Container) {
     this.repo = new SkillsRepository(container.db);
+    this.repoRepo = new RepoRepository(container.db);
   }
 
   async list(workspaceId: string, filter: { type?: SkillType; enabled?: boolean; q?: string } = {}): Promise<Skill[]> {
@@ -155,5 +160,64 @@ export class SkillsService {
       created.push(skill);
     }
     return created;
+  }
+
+  // ---- context docs ----------------------------------------------------------
+
+  /**
+   * Return all context docs attached to a skill (unordered — skills attachments
+   * have no ordering). Throws NotFoundError when the skill isn't in this workspace.
+   */
+  async getContextDocs(workspaceId: string, skillId: string): Promise<SkillContextDoc[]> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) throw new NotFoundError('Skill not found');
+    return this.repo.getContextDocs(skillId);
+  }
+
+  /**
+   * Atomically replace the context docs attached to a skill.
+   *
+   * Security / R7: builds the workspace's discovered doc set BEFORE persisting
+   * and rejects any (repo_id, path) pair that is absent — preventing attachment
+   * of arbitrary paths (path-traversal, stale IDs, etc.). The check is all-or-
+   * nothing: no partial persistence on any validation failure.
+   */
+  async replaceContextDocs(
+    workspaceId: string,
+    skillId: string,
+    items: Array<{ path: string; repo_id: string }>,
+  ): Promise<SkillContextDoc[]> {
+    // (1) Assert skill belongs to workspace — unauthorized access → 404.
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) throw new NotFoundError('Skill not found');
+
+    // (2) Fetch all repos for the workspace (single query, then pass to discovery).
+    const repos = await this.repoRepo.list(workspaceId);
+
+    // (3) Discover valid context docs from disk (pure FS utility, no DB/LLM).
+    const repoInputs = repos.map((r) => ({ repoId: r.id, clonePath: r.clonePath }));
+    const discovered = await discoverContextDocs(repoInputs);
+
+    // (4) Build whitelist: `${repoId}:${relativePath}` for O(1) lookup.
+    const validSet = new Set(discovered.map((d) => `${d.repoId}:${d.relativePath}`));
+
+    // (5) Validate ALL items before touching the DB — no partial persistence.
+    for (const item of items) {
+      if (!validSet.has(`${item.repo_id}:${item.path}`)) {
+        throw new ValidationError('One or more context doc paths are not valid for this workspace', {
+          code: 'INVALID_CONTEXT_DOC_PATH',
+          path: `${item.repo_id}:${item.path}`,
+        });
+      }
+    }
+
+    // (6) Atomically replace (repository handles DELETE + INSERT in one transaction).
+    await this.repo.replaceContextDocs(
+      skillId,
+      items.map((it) => ({ repoId: it.repo_id, relativePath: it.path })),
+    );
+
+    // Return the authoritative list so callers get consistent state.
+    return this.repo.getContextDocs(skillId);
   }
 }

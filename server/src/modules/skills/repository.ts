@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
-import type { SkillSource, SkillType } from '@devdigest/shared';
+import type { SkillContextDoc, SkillSource, SkillType } from '@devdigest/shared';
 import { INITIAL_SKILL_VERSION } from './constants.js';
 
 export type { SkillRow, SkillVersionRow };
@@ -192,5 +192,59 @@ export class SkillsRepository {
       .insert(t.skillVersions)
       .values({ skillId, version, body })
       .onConflictDoNothing();
+  }
+
+  // ---- skill_context_docs (unordered, no `order` column) --------------------
+
+  /** All context docs attached to a skill (unordered). */
+  async getContextDocs(skillId: string): Promise<SkillContextDoc[]> {
+    const rows = await this.db
+      .select()
+      .from(t.skillContextDocs)
+      .where(eq(t.skillContextDocs.skillId, skillId));
+    return rows.map((r) => ({
+      skill_id: r.skillId,
+      repo_id: r.repoId,
+      relative_path: r.relativePath,
+    }));
+  }
+
+  /**
+   * Minimal projection used by the run-executor (T6) to collect doc paths
+   * without the skill_id foreign key overhead.
+   */
+  async getContextDocPaths(
+    skillId: string,
+  ): Promise<Array<{ repoId: string; relativePath: string }>> {
+    return this.db
+      .select({
+        repoId: t.skillContextDocs.repoId,
+        relativePath: t.skillContextDocs.relativePath,
+      })
+      .from(t.skillContextDocs)
+      .where(eq(t.skillContextDocs.skillId, skillId));
+  }
+
+  /**
+   * Atomically replace the full set of context docs for a skill.
+   * DELETE + INSERT execute inside a single transaction so the list is never
+   * partially updated. Passing an empty `items` array correctly leaves zero rows.
+   */
+  async replaceContextDocs(
+    skillId: string,
+    items: Array<{ repoId: string; relativePath: string }>,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.skillContextDocs).where(eq(t.skillContextDocs.skillId, skillId));
+      if (items.length > 0) {
+        await tx.insert(t.skillContextDocs).values(
+          items.map((item) => ({
+            skillId,
+            repoId: item.repoId,
+            relativePath: item.relativePath,
+          })),
+        );
+      }
+    });
   }
 }

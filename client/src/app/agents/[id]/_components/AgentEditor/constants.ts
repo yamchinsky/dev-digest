@@ -8,8 +8,10 @@ export interface EditorTab {
 }
 
 /** Editor tabs. Part-0 ships Config only; A1 adds Skills (linked skill set
- *  + drag-to-reorder + per-skill enable). Later lessons add Evals/Stats/CI. */
+ *  + drag-to-reorder + per-skill enable). T9 adds Context (project-context
+ *  docs attached to this agent). Later lessons add Evals/Stats/CI. */
 export const TABS: readonly EditorTab[] = [
   { key: "config", labelKey: "editor.tabs.config", icon: "Settings" },
   { key: "skills", labelKey: "editor.tabs.skills", icon: "Sparkles" },
+  { key: "context", labelKey: "editor.tabs.context", icon: "FileText" },
 ];

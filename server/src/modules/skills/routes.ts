@@ -5,6 +5,7 @@ import {
   CreateSkillBody,
   ImportCommitBody,
   ImportSkillUpload,
+  PutContextDocsBody,
   SkillType,
   UpdateSkillBody,
 } from '@devdigest/shared';
@@ -24,6 +25,8 @@ import { IMPORT_PREVIEW_BODY_LIMIT } from './constants.js';
  *   DELETE /skills/:id                    → delete
  *   POST   /skills/import/preview         → parse .md or .zip, return items
  *   POST   /skills/import/commit          → persist a reviewed preview
+ *   GET    /skills/:id/context-docs       → list attached context docs (unordered)
+ *   PUT    /skills/:id/context-docs       → atomically replace attached context docs
  */
 
 const ListQuery = z.object({
@@ -139,6 +142,22 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
       const skills = await service.commitImport(workspaceId, req.body);
       reply.status(201);
       return skills;
+    },
+  );
+
+  // ---- context docs (unordered; no `order` field) --------------------------
+
+  app.get('/skills/:id/context-docs', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    return service.getContextDocs(workspaceId, req.params.id);
+  });
+
+  app.put(
+    '/skills/:id/context-docs',
+    { schema: { params: IdParams, body: PutContextDocsBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      return service.replaceContextDocs(workspaceId, req.params.id, req.body.items);
     },
   );
 }

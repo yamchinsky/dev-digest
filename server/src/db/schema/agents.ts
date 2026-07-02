@@ -1,7 +1,8 @@
-import { pgTable, uuid, text, integer, boolean, jsonb, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, boolean, jsonb, primaryKey, index } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces, users } from './core';
 import { skills } from './skills';
+import { repos } from './repos';
 
 // ============================================================ Agents & skills
 
@@ -60,4 +61,19 @@ export const agentSkills = pgTable(
     order: integer('order').notNull().default(0),
   },
   (t) => ({ pk: primaryKey({ columns: [t.agentId, t.skillId] }) }),
+);
+
+export const agentContextDocs = pgTable(
+  'agent_context_docs',
+  {
+    agentId: uuid('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
+    repoId: uuid('repo_id').notNull().references(() => repos.id, { onDelete: 'cascade' }),
+    relativePath: text('relative_path').notNull(),
+    order: integer('order').notNull().default(0),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.agentId, t.repoId, t.relativePath] }),
+    agentIdx: index('agent_context_docs_agent_idx').on(t.agentId),
+    repoPathIdx: index('agent_context_docs_repo_path_idx').on(t.repoId, t.relativePath),
+  }),
 );

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
+import type { AgentContextDoc, CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
 import { DEFAULT_AGENT_DESCRIPTION, INITIAL_AGENT_VERSION } from './constants.js';
 import { isConfigChange } from './helpers.js';
 
@@ -232,5 +232,60 @@ export class AgentsRepository {
     await this.db
       .insert(t.agentSkills)
       .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+  }
+
+  // ---- agent_context_docs --------------------------------------------------
+
+  /** Context docs linked to an agent, in `order` ascending. */
+  async getContextDocs(agentId: string): Promise<AgentContextDoc[]> {
+    const rows = await this.db
+      .select()
+      .from(t.agentContextDocs)
+      .where(eq(t.agentContextDocs.agentId, agentId))
+      .orderBy(asc(t.agentContextDocs.order));
+    return rows.map((r) => ({
+      agent_id: r.agentId,
+      repo_id: r.repoId,
+      relative_path: r.relativePath,
+      order: r.order,
+    }));
+  }
+
+  /**
+   * Context doc paths for an agent (lightweight projection used by run-executor).
+   * Returns raw camelCase fields to avoid unnecessary DTO allocation on the hot path.
+   */
+  async getContextDocPaths(
+    agentId: string,
+  ): Promise<Array<{ repoId: string; relativePath: string; order: number }>> {
+    const rows = await this.db
+      .select()
+      .from(t.agentContextDocs)
+      .where(eq(t.agentContextDocs.agentId, agentId))
+      .orderBy(asc(t.agentContextDocs.order));
+    return rows.map((r) => ({ repoId: r.repoId, relativePath: r.relativePath, order: r.order }));
+  }
+
+  /**
+   * Atomically replace the full context-doc set for an agent.
+   * Single Drizzle transaction: DELETE all existing rows, then bulk INSERT
+   * the new set. An empty `items` array performs only the DELETE.
+   */
+  async replaceContextDocs(
+    agentId: string,
+    items: Array<{ repoId: string; relativePath: string; order: number }>,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.agentContextDocs).where(eq(t.agentContextDocs.agentId, agentId));
+      if (items.length === 0) return;
+      await tx.insert(t.agentContextDocs).values(
+        items.map((item) => ({
+          agentId,
+          repoId: item.repoId,
+          relativePath: item.relativePath,
+          order: item.order,
+        })),
+      );
+    });
   }
 }

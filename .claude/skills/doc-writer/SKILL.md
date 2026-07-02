@@ -55,7 +55,7 @@ the code change — prefer fresh+small over large+stale.
 | Durable, non-obvious surprise / lesson | `<module>/INSIGHTS.md` (or root `INSIGHTS.md`) | Defer to the `engineering-insights` skill — do not write INSIGHTS entries directly. |
 | Deep dive that doesn't fit one module README | `docs/<topic>.md` | Currently only `docs/agent-prompts/`. Scan `docs/` first. Use a flat file unless the topic is large enough to warrant a sub-dir. |
 | AI reviewer prompt edits | `docs/agent-prompts/<name>.md` | Four reviewers already exist (`general-reviewer.md`, `security-reviewer.md`, `performance-reviewer.md`, `test-quality-reviewer.md`). Edit in place; add a new file only for a new reviewer. |
-| Implementation / Development Plan | `docs/plans/<feature>.md` | Verified by the `plan-verifier` skill. Do not convert plans to docs — plans stay as plans; the outcome is the module README/How-to doc. |
+| Implementation Plan | `docs/plans/<feature>.md` | Verified by the `plan-verifier` skill. Do not convert plans to docs — plans stay as plans; the outcome is the module README/How-to doc. |
 | Architecture Decision Record | `docs/adr/NNNN-<kebab-title>.md` | `docs/adr/` does not exist yet — **create the convention** when writing the first ADR. Zero-pad to four digits (e.g. `0001-choose-drizzle.md`). Follow the MADR template (see `references.md`). |
 | Contract / DTO / shared fixture | `<module>/specs/` (e.g. `client/specs/`, `server/specs/`) | All four modules have a `specs/` dir; place the file in the module that owns the contract. |
 
