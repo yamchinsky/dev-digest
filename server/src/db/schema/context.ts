@@ -124,3 +124,29 @@ export const onboarding = pgTable('onboarding', {
   json: jsonb('json').notNull(),
   generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const onboardingTours = pgTable(
+  'onboarding_tours',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    repoId: uuid('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** { architecture_overview, critical_paths, how_to_run_locally, first_tasks } */
+    sections: jsonb('sections').notNull(),
+    /** { file, rank, description }[] ordered by rank DESC */
+    readingPath: jsonb('reading_path').notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
+    filesIndexed: integer('files_indexed').notNull(),
+    indexStatusAtGeneration: text('index_status_at_generation', {
+      enum: ['full', 'partial', 'degraded', 'failed'],
+    }).notNull(),
+  },
+  (t) => ({
+    repoWsUq: uniqueIndex('onboarding_tours_repo_ws_uq').on(t.repoId, t.workspaceId),
+    wsIdx: index('onboarding_tours_ws_idx').on(t.workspaceId),
+  }),
+);
