@@ -24,6 +24,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: "pulls", label: "Pull Requests", icon: "GitPullRequest", href: "/repos/:repoId/pulls", gKey: "p" },
       { key: "conventions", label: "Conventions", icon: "Sparkles", href: "/repos/:repoId/conventions", gKey: "c" },
+      { key: "onboarding-tour", label: "Onboarding Tour", icon: "Lightbulb", href: "/repos/:repoId/onboarding-tour", gKey: "o" },
       { key: "agents", label: "Agents", icon: "Cpu", href: "/agents", gKey: "a" },
       { key: "context-docs", label: "Project Context", icon: "FileText", href: "/context-docs", gKey: "x" },
     ],
@@ -60,6 +61,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: "⌘K", label: "Open command palette", group: "Global" },
   { keys: "?", label: "Show keyboard shortcuts", group: "Global" },
   { keys: "g p", label: "Go to Pull Requests", group: "Navigation" },
+  { keys: "g o", label: "Go to Onboarding Tour", group: "Navigation" },
   { keys: "g k", label: "Go to Skills", group: "Navigation" },
   { keys: "g a", label: "Go to Agents", group: "Navigation" },
   { keys: "g x", label: "Go to Project Context", group: "Navigation" },

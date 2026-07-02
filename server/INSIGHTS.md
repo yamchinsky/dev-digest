@@ -109,4 +109,8 @@ _2026-06-18_ · see repo-root `INSIGHTS.md` → Recurring Errors & Fixes
 _None yet._
 
 ## Open Questions
-_None yet._
+
+### `resolveFeatureModel` returns `provider: string`, but `container.llm()` takes a provider union — every caller casts
+_2026-07-02_ · `server/src/modules/onboarding-tours/service.ts`, `server/src/modules/conventions/service.ts`, `platform/container.ts`
+
+`container.llm()` is typed `'openai' | 'anthropic' | 'openrouter'`, while `FeatureModelChoice.provider` is plain `string`, so feature-model consumers either cast (`as 'openai' | …`, onboarding-tours) or hardcode the provider (conventions). A bad provider string persisted in settings would pass the type check via the cast and fail at runtime inside the adapter. Fix direction: type `FeatureModelChoice.provider` as the union (validate at the settings write edge), or add a narrowing helper on `Container`. Not urgent — settings UI only offers valid providers — but the cast pattern will spread with each new feature-model consumer.
