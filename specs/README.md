@@ -33,6 +33,7 @@ Conventions:
 
 <!-- one line per spec, appended by spec-creator -->
 - [SPEC-01 — Project Context Folder](SPEC-01-2026-07-project-context-folder.md) — attach repo markdown specs/docs/insights to agents and skills so reviewers enforce project contracts, not just generic best practices (implemented)
+- [SPEC-02 — Onboarding Generator](SPEC-02-2026-07-onboarding-generator.md) — one-LLM-call tour of an unfamiliar repo: architecture overview, critical paths, rank-ordered reading list, and first tasks, powered by the existing repo-intel index (draft)
 
 Link new files from `AGENTS.md` via the `Read … when …` block so they
 actually get read.
