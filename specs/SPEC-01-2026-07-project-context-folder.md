@@ -21,7 +21,9 @@ Markdown specs, docs, and architectural notes that live inside a repository toda
 - User-configurable discovery root folders (roots are fixed: `specs/`, `docs/`, `insights/`).
 - Fetching documents from URLs, GitHub raw API, or any source other than the workspace's existing on-disk clones.
 - Enforcing a hard token ceiling for the injected context block (token count is displayed for the user's awareness, not enforced by the system).
-- Editing document content inside DevDigest (preview only; edits happen in the repository).
+- ~~Editing document content inside DevDigest (preview only; edits happen in the repository).~~
+
+> **Amended 2026-07-02** — in-place editing was added post-implementation at the user's request (Preview | Edit toggle on the Project Context page, `PUT /workspace/context-docs/content`). The write endpoint reuses the same discovered-set whitelist as the preview endpoint, so only existing `.md` files under `specs/`/`docs/`/`insights/` inside a clone are writable. Caveat by design: edits land in the on-disk clone and may be overwritten when the clone re-syncs from the remote — the durable home for doc changes remains a commit in the repository.
 
 ## User stories
 
@@ -166,6 +168,7 @@ sequenceDiagram
 | `GET /workspace/context-docs` | → `ContextDoc[]` | All docs discovered from all repos in the workspace; no request body |
 | `GET /repos/:repoId/context-docs` | → `ContextDoc[]` | Docs discovered from a single repo's clone only |
 | `GET /workspace/context-docs/preview` | query `path`, `repoId` → `{ content: string }` | Raw markdown content of one doc; `path` must be in the workspace's discovered set; requires workspace auth |
+| `PUT /workspace/context-docs/content` | body `{ repoId, path, content ≤ 1 MB }` → `{ content }` | *(2026-07-02 amendment)* Overwrites one discovered doc's file in the clone; same whitelist gate as preview |
 | `GET /agents/:id/context-docs` | → `AgentContextDoc[]` | Ordered list of paths attached to the agent |
 | `PUT /agents/:id/context-docs` | body `{ items: { path: string; repo_id: string }[] }` → 200 | Replaces the agent's full ordered attachment list; array position implies order; server rejects paths not in the discovered set |
 | `GET /skills/:id/context-docs` | → `SkillContextDoc[]` | Unordered list of paths attached to the skill |

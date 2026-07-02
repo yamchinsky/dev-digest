@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import type { Container } from '../../platform/container.js';
 import type { ContextDoc } from '@devdigest/shared';
 import { NotFoundError } from '../../platform/errors.js';
@@ -104,5 +104,42 @@ export class WorkspaceService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Overwrite the content of a single context doc on disk (SPEC-01 amendment:
+   * in-place editing from the Project Context page).
+   *
+   * Security: identical whitelist gate to preview() — the path must already
+   * be in the discovered set, so this can only rewrite existing .md files
+   * under specs/docs/insights inside the repo's clone; it can never create
+   * new files or touch anything outside the whitelist.
+   *
+   * Caveat (by design): the clone is re-synced from the remote, so edits made
+   * here can be overwritten on the next pull — the durable home for doc
+   * changes is a commit in the repository itself.
+   */
+  async updateContent(
+    workspaceId: string,
+    repoId: string,
+    relativePath: string,
+    content: string,
+  ): Promise<{ content: string }> {
+    const repo = await this.repoRepo.getById(workspaceId, repoId);
+
+    if (!repo) throw new NotFoundError('Repo not found');
+
+    const discovered = await discoverContextDocs([
+      { repoId, clonePath: repo.clonePath },
+    ]);
+    const validPaths = new Set(discovered.map((d) => d.relativePath));
+
+    if (!validPaths.has(relativePath)) {
+      throw new NotFoundError('Context doc not found');
+    }
+
+    const clonePath = repo.clonePath!; // non-null: discoverContextDocs skips null paths
+    await writeFile(path.join(clonePath, relativePath), content, 'utf8');
+    return { content };
   }
 }

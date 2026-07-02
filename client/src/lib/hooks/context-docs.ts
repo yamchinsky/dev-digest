@@ -34,6 +34,23 @@ export function useContextDocPreview(repoId: string | null, path: string | null)
   });
 }
 
+/**
+ * Overwrite the content of a single context doc (Preview | Edit toggle on the
+ * Project Context page). The server only accepts paths already in the
+ * discovered set. On success the preview cache is primed with the saved
+ * content so the Preview tab reflects the edit without a refetch.
+ */
+export function useUpdateContextDocContent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { repoId: string; path: string; content: string }) =>
+      api.put<{ content: string }>("/workspace/context-docs/content", vars),
+    onSuccess: (data, vars) => {
+      qc.setQueryData(["context-doc-preview", vars.repoId, vars.path], data);
+    },
+  });
+}
+
 /** Context docs attached to a specific agent (ordered list). */
 export function useAgentContextDocs(agentId: string) {
   return useQuery({
