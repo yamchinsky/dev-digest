@@ -173,6 +173,10 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
    * Five-section schema expected from the LLM's structured call.
    * Server-internal (used in `completeStructured`); included here so it can be
    * imported by the service without reaching into reviewer-core internals.
+   *
+   * NOTE: `rank` is NOT in the LLM schema — it is injected server-side from
+   * getFileRank() after the LLM call. Do not add a `rank` field here or the
+   * structured-output contract will expect the model to supply it.
    */
   export const TourLLMSchema = z.object({
     architecture_overview: z.string().min(1),
@@ -238,7 +242,7 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 - **Red flags**:
   - The two `onboarding-tour.ts` files **must be byte-for-byte identical**. Copy-paste; do not diverge.
   - Both barrels use `.js` suffix in the export statement (ESM requirement in the server tree; Next.js resolves it fine in the client tree) — this is the dual-vendored `.js` exception documented in `client/INSIGHTS.md`.
-  - `INJECTION_GUARD` already exists in `@devdigest/shared → contracts/knowledge.ts` as... actually it does not; check `knowledge.ts` exports before assuming a name conflict. The existing `Onboarding`, `OnboardingSection`, `OnboardingLink` types in `knowledge.ts` are STALE STUBS — do NOT use them; the new `OnboardingTour` name is distinct and does not collide.
+  - The existing `Onboarding`, `OnboardingSection`, `OnboardingLink` types in `contracts/knowledge.ts` are STALE STUBS — do NOT use them; the new `OnboardingTour` name is distinct and does not collide.
   - `reviewer-core` uses **npm** (not pnpm); the typecheck command is `npm run build` from `/Users/admin/dev-digest/reviewer-core`.
 
 ---
@@ -250,6 +254,10 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   - `server/src/modules/onboarding-tours/service.ts` (new)
   - `server/src/modules/onboarding-tours/repository.ts` (new)
   - `server/src/modules/index.ts`
+
+- **Read-only dependencies (not owned — do not modify)**:
+  - `server/src/modules/repos/repository.ts` (`RepoRepository.getById`) — call as-is
+  - `container.repoIntel` facade — call facade methods only; do not reach into `modules/repo-intel/service.ts`
 
 - **Skills (mandatory)**: `onion-architecture`, `fastify-best-practices`, `zod`, `security`
 
@@ -316,7 +324,6 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   import { DEFAULT_REPO_MAP_TOKEN_BUDGET } from '../repo-intel/constants.js';
   import { RepoRepository } from '../repos/repository.js';
   import { NotFoundError, ValidationError, ExternalServiceError } from '../../platform/errors.js';
-  import { getContext } from '../_shared/context.js';  // for workspace auth in routes
   ```
 
   `OnboardingTourService` constructor takes `Container`. Maintains `private inFlight = new Set<string>()`.
@@ -334,9 +341,15 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
      - `this.container.repoIntel.getRepoMap(repoId, DEFAULT_REPO_MAP_TOKEN_BUDGET)`
      - `this.container.repoIntel.getCriticalPaths(repoId)`
      - `this.container.repoIntel.getTopFilesByRank(repoId, TOP_FILES_N)`
-  7. Call `this.container.repoIntel.getFileRank(repoId, topFiles)` → `FileRankRow[]` to get percentile per file. Build `rankMap: Map<string, number>` from `path → percentile`.
+  7. Guard the `getFileRank` call against an empty `topFiles` list (happens on a degraded index):
+     ```ts
+     const fileRanks = topFiles.length > 0
+       ? await this.container.repoIntel.getFileRank(repoId, topFiles)
+       : [];
+     const rankMap = new Map(fileRanks.map(r => [r.path, r.percentile]));
+     ```
   8. `const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'onboarding')`.
-  9. `const llm = await this.container.llm(provider)`.
+  9. `const llm = await this.container.llm(provider)` — wrap in try/catch; on `ConfigError` re-throw as-is (misconfiguration, not upstream); on all other errors wrap in `ExternalServiceError('llm-onboarding', err.message)`.
   10. Build system prompt: `\`You are an expert technical writer producing a five-section developer onboarding tour. ${INJECTION_GUARD}\``.
   11. Build user message: join sections separated by `\n\n`:
       - `## Repository map\n${wrapUntrusted('repo-map', repoMapResult.text || '(no repo map available)')}`
@@ -344,12 +357,17 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
       - `## Files ordered by code importance (rank descending)\n${wrapUntrusted('top-files', topFiles.join('\n') || '(no files indexed)')}`
       - Instruction: `'For reading_path: return exactly one entry per file listed under "Files ordered by code importance", in the same order, with a one-to-two sentence description of what each file does.'`
   12. `const startMs = Date.now()`.
-  13. `const result = await llm.completeStructured({ model, schema: TourLLMSchema, schemaName: 'OnboardingTour', messages: [{role:'system',content:systemPrompt},{role:'user',content:userMsg}], maxTokens: 8000, maxRetries: 1 })`.
-      If this throws (schema validation failed after retry), the `finally` block cleans `inFlight`; existing DB row is untouched; propagate error to the route handler.
+  13. Call `llm.completeStructured(...)` — wrap in try/catch; catch ALL errors (provider failures and schema-validation failures after retry) and throw `ExternalServiceError('llm-onboarding', err.message)`. The route's global error handler maps `ExternalServiceError` → HTTP 502. **On any throw here the `finally` block fires, `inFlight.delete` runs, and `upsertTour` is never reached — AC-5 is satisfied by construction.**
   14. `const durationMs = Date.now() - startMs`.
   15. Assemble `readingPath`: map `topFiles` (already rank-descending) to `{ file, rank: rankMap.get(file) ?? 0, description: descMap.get(file) ?? '' }`. Build `descMap` from `result.data.reading_path`.
   16. `await this.repo.upsertTour({...})` with `generatedAt: new Date()`, `filesIndexed: indexState.filesIndexed`, `indexStatusAtGeneration: indexState.status`.
   17. Return `{ tour: toDTO(row), log: { llm_calls: 1, model: result.model, tokens_used: result.tokensIn + result.tokensOut, duration_ms: durationMs } }`.
+
+  **Error mapping summary** (for the route layer's global error handler):
+  - `NotFoundError` → 404 (repo not found or no tour for GET)
+  - `ValidationError` → 422 (no clone path — consistent with server taxonomy)
+  - `ExternalServiceError` → 502 (LLM provider failure OR schema-validation failure after retries)
+  - `ConfigError` → re-thrown as-is → 500 (misconfigured API key, operator issue)
 
   **`routes.ts`** — thin Fastify plugin:
   ```
@@ -358,13 +376,16 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
        → 200 with OnboardingTour | 404 (NotFoundError for no tour or no repo)
 
   POST /repos/:id/onboarding-tour/generate
+       config: { rateLimit: { max: 3, timeWindow: '1 minute' } }
        → getContext → service.generateTour(workspaceId, id)
        → 200 with { tour: OnboardingTour, log: GenerationLog }
          OR { status: "in_progress" }
   ```
   Use `IdParams` from `modules/_shared/schemas.ts` for `:id`. Both routes call
-  `getContext(app.container, req)` first. Rate limit for POST: leave at global
-  `120/min` default; no per-route override.
+  `getContext(app.container, req)` first. The per-route rate limit (max 3
+  generate calls per repo per minute) provides a cheap cost-control backstop
+  consistent with the `/pulls/:id/review` precedent; it does not replace
+  the in-flight dedup (which prevents concurrent calls, not sequential ones).
 
   **`server/src/modules/index.ts`** — add one import and one entry:
   ```ts
@@ -385,12 +406,12 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
 - **Red flags**:
   - `inFlight` is an instance-level `Set<string>`. The service is constructed once per app boot (via DI). Do not make it a global or module-level variable.
-  - `completeStructured` throwing (after exhausting `maxRetries: 1`) must propagate upward WITHOUT running `upsertTour`. The `try/finally` only handles `inFlight.delete` — the route's global error handler converts the throw into an error response. This is how AC-5 is satisfied: no UPSERT ever runs on a validation failure.
+  - `completeStructured` throwing (after exhausting `maxRetries: 1`) must propagate upward as `ExternalServiceError` WITHOUT running `upsertTour`. The route's global error handler converts it to HTTP 502. This is how AC-5 is satisfied: no UPSERT ever runs on a validation failure.
+  - **Empty `topFiles` guard (F2)**: when `getTopFilesByRank()` returns `[]` (degraded index), skip `getFileRank` entirely — `topFiles.length > 0 ? await getFileRank(...) : []`. Without this guard, calling `getFileRank(repoId, [])` issues a vacuous DB query and the subsequent `rankMap` is empty anyway, but it is wasteful and may error on edge-case DB drivers.
   - `readingPath` ordering: `topFiles` from `getTopFilesByRank()` is already in rank-descending order. Map it to the result array preserving that order. Do NOT sort by `descMap` insertion order or alphabetically.
   - ESM imports: all internal server imports use `.js` suffix.
   - `DEFAULT_REPO_MAP_TOKEN_BUDGET` is in `../repo-intel/constants.js` (currently `1500` tokens).
-  - `getFileRank` is on the `RepoIntel` interface; it is mock-testable and works on degraded indexes (returns `[]` → rankMap is empty → all ranks default to `0`).
-  - The `ValidationError` for no-clone-path will translate to HTTP 422 via the global error handler (consistent with the server taxonomy — see root INSIGHTS.md re: AC-20 http-code note).
+  - The `ValidationError` for no-clone-path translates to HTTP 422 (consistent with server taxonomy — see root INSIGHTS.md re: AC-20 http-code note). Client-side: rely on the existing global mutation-error toast; no per-component `onError` is needed.
 
 ---
 
@@ -417,6 +438,7 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
    * GET /repos/:repoId/onboarding-tour
    * Returns null when the server responds 404 (no tour yet) — per client error policy
    * (4xx stays silent, pages handle inline empty-state).
+   * All 5xx errors are re-thrown; TanStack Query surfaces them via isError.
    */
   export function useOnboardingTour(repoId: string) {
     return useQuery({
@@ -428,7 +450,7 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
           if (err && typeof err === 'object' && 'status' in err && err.status === 404) {
             return null;
           }
-          throw err;
+          throw err; // 5xx re-thrown — caller renders ErrorState
         }
       },
       enabled: !!repoId,
@@ -438,7 +460,17 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
   /**
    * POST /repos/:repoId/onboarding-tour/generate
-   * On success, invalidate the tour query so the page re-fetches the persisted tour.
+   *
+   * Primary flow (the common case): the server awaits the full LLM call and returns
+   * { tour: OnboardingTour, log: GenerationLog } synchronously — no polling needed.
+   * On success, write the returned tour directly into the query cache (setQueryData)
+   * for an immediate UI update, then also invalidate to trigger a background refresh.
+   *
+   * Dedup flow (rare — second session fires while first is in-progress on the server):
+   * The server returns { status: "in_progress" }. Treat this as an info state, NOT
+   * an error. The onSuccess handler detects the shape and shows a toast asking the
+   * user to refresh shortly; it also invalidates so the GET query re-fetches once the
+   * in-progress generation completes.
    */
   export function useGenerateTour(repoId: string) {
     const qc = useQueryClient();
@@ -448,12 +480,23 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
           `/repos/${repoId}/onboarding-tour/generate`,
           {},
         ),
-      onSuccess: () => {
+      onSuccess: (data) => {
+        if ('tour' in data) {
+          // Primary path: write fresh tour into cache immediately (no spinner-wait for refetch)
+          qc.setQueryData(QUERY_KEY(repoId), data.tour);
+        }
+        // Always invalidate: ensures background sync and covers the in_progress path
         qc.invalidateQueries({ queryKey: QUERY_KEY(repoId) });
       },
     });
   }
   ```
+
+  **Caller responsibility for `in_progress` response**: T5's `OnboardingTour.tsx`
+  checks `generate.data` after mutation and shows a toast when
+  `generate.data?.status === 'in_progress'` (see T5 task body). T4 itself does
+  not import `useToast` — that cross-cutting concern belongs in the component, not
+  the hook.
 
   **`client/src/lib/hooks/index.ts`** — append:
   ```ts
@@ -479,10 +522,11 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
 - **Red flags**:
   - The 404 catch in `useOnboardingTour` MUST convert to `null` rather than re-throwing. Per client AGENTS.md, the global policy toasts on `0` and `5xx` only; a `404` is an expected "not yet generated" state that the UI must handle inline.
-  - `staleTime: 0` is intentional: after a regeneration the user expects the tour to refresh. Do not set a long stale time here.
+  - `staleTime: 0` is intentional: after a regeneration the user expects the tour to refresh.
   - `api.post` signature: match the existing pattern from `client/src/services/api.ts` — pass an empty body `{}` for the generate endpoint since it takes no request body.
   - `Lightbulb` is confirmed in the `Icon` registry in `vendor/ui/icons.tsx`. Do not use `BookOpen` — it is NOT in the registry.
   - The `activeKeyFor("/onboarding")` → `"onboarding-tour"` mapping is ALREADY in `client/src/components/app-shell/helpers.ts` (line 29). Do not duplicate it.
+  - The `setQueryData` call writes `data.tour` (type `OnboardingTour`) — ensure the TypeScript narrowing guard `'tour' in data` is present before accessing `data.tour`.
 
 ---
 
@@ -528,9 +572,22 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   }
   ```
 
-  **`OnboardingTour.tsx`** — feature component. Renders three states:
+  **`OnboardingTour.tsx`** — feature component. Render priority (top to bottom):
 
-  *State C — No clone path (AC-8):*
+  *Loading state — repos not yet loaded (F3):*
+  `useActiveRepo()` returns `{ activeRepo, reposLoaded }` (check the provider for the
+  exact field name — it may be `repos.length > 0` or a `reposLoaded` boolean). While
+  repos are loading, `activeRepo` is `null` regardless of whether the repo has a clone
+  path. Show a skeleton during this window — do NOT interpret `activeRepo === null` as
+  "no clone path" until repos have finished loading:
+  ```tsx
+  const { activeRepo, reposLoaded } = useActiveRepo();
+  if (!reposLoaded) {
+    return <Skeleton height={400} />;
+  }
+  ```
+
+  *State C — No clone path (AC-8, only after repos are confirmed loaded):*
   ```tsx
   if (!activeRepo?.clone_path) {
     return (
@@ -542,6 +599,25 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
       // No Generate or Regenerate button — AC-8
     );
   }
+  ```
+
+  *5xx error from tour query (F9):*
+  ```tsx
+  const { data: tourData, isLoading, isError, error, refetch } = useOnboardingTour(repoId);
+  if (isError) {
+    return (
+      <ErrorState
+        title={t("error.title")}
+        body={t("error.body")}
+        onRetry={() => refetch()}
+      />
+    );
+  }
+  ```
+
+  *Loading tour:*
+  ```tsx
+  if (isLoading) return <Skeleton height={400} />;
   ```
 
   *State B — No tour yet (AC-7):*
@@ -561,7 +637,24 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
   *State A — Tour exists (AC-6, AC-9, AC-10, AC-11, AC-12, AC-13, AC-14):*
 
-  Subtitle text: `t("subtitle", { filesIndexed: tourData.files_indexed, timeAgo: relativeTime(tourData.generated_at) })`. Use a simple relative-time formatter: `formatDistanceToNow` from the `date-fns` package (already available in the project — verify with `grep -r "date-fns" client/package.json` before importing; if absent, use a manual computation `Math.floor((Date.now() - Date.parse(ts)) / 60000)` minutes approach).
+  Generate mutation and `in_progress` handling (F4):
+  ```tsx
+  const generate = useGenerateTour(repoId);
+  const toast = useToast();
+
+  React.useEffect(() => {
+    if (generate.data && 'status' in generate.data && generate.data.status === 'in_progress') {
+      toast.info(t("inProgress"));
+    }
+  }, [generate.data]);
+  ```
+  No polling is needed for the primary flow: the server awaits the full LLM response
+  and returns the tour synchronously; `useGenerateTour`'s `onSuccess` writes the
+  result directly into the query cache. The `in_progress` branch only occurs when a
+  second browser session fires while the first is still generating — show the toast
+  and let the user manually refresh or click Regenerate again.
+
+  Subtitle text: `t("subtitle", { filesIndexed: tourData.files_indexed, timeAgo: relativeTime(tourData.generated_at) })`. Use `formatDistanceToNow` from `date-fns` if available (check `client/package.json`); fall back to a manual computation if absent.
 
   Incomplete-index badge (AC-10, AC-11):
   ```tsx
@@ -624,11 +717,6 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   </Button>
   ```
 
-  Polling while in-progress: when `generate.data?.status === 'in_progress'`,
-  set `refetchInterval: 3000` on `useOnboardingTour` by passing a dynamic interval
-  prop, or use a local `isPolling` state to trigger a `useEffect` that calls
-  `refetch()` on a 3-second interval.
-
   **`client/messages/en/onboardingTour.json`**:
   ```json
   {
@@ -643,6 +731,11 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
       "title": "No onboarding tour yet",
       "body": "Generate a five-section tour from the repository's indexed structure."
     },
+    "error": {
+      "title": "Could not load tour",
+      "body": "Unexpected error — click retry or reload the page."
+    },
+    "inProgress": "Generation already running — refresh shortly.",
     "sections": {
       "architectureOverview": "Architecture Overview",
       "criticalPaths": "Critical Paths",
@@ -670,19 +763,22 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
     - repo with persisted tour → five section headings visible + subtitle
     - repo without persisted tour (clone_path set) → empty state + Generate button; zero section headings in DOM
     - repo without clone_path → error state; no Generate or Regenerate button in DOM
+  - **Repos-loading skeleton**: while `reposLoaded` is false, a skeleton renders instead of State C — verified by observing the page briefly during initial app load (State C must not flicker before repos load).
+  - **5xx error state**: when `useOnboardingTour` returns `isError: true`, an `ErrorState` with a retry button is rendered instead of a blank pane.
   - The mount chain is complete: nav item with `gKey: "o"` → href `/repos/:repoId/onboarding-tour` → `page.tsx` renders `<OnboardingTour>`.
 
 - **Depends-on**: T4
 
 - **Red flags**:
+  - **`useActiveRepo()` returns `{ activeRepo: null }` while repos are loading** (F3): never interpret `activeRepo === null` as "no clone path" until `reposLoaded` (or equivalent) is `true`. Check the actual provider shape in `client/src/providers/repo-context.tsx` and use the correct field — do not assume the field name.
   - Check `client/package.json` for `date-fns` before importing it. If absent, implement relative time manually rather than adding a new dependency.
-  - The `incompleteBadge` string (`t("incompleteBadge")`) is display copy, NOT a prompt-format literal — it IS appropriate to translate. The `INJECTION_GUARD` text in the server is the prompt-format literal that must NOT be i18n-wrapped (but that lives server-side).
+  - The `incompleteBadge` string is display copy, NOT a prompt-format literal — it IS appropriate to translate.
   - Never hardcode English strings in JSX — all user-facing text goes through `useTranslations("onboardingTour")`.
-  - The disclaimer (AC-12) must be inside the How to Run Locally section structure so it is always visible when that section is rendered, not only on hover or in a collapsed state.
-  - `role="alert"` with `aria-live="polite"` on the incomplete-index badge satisfies the spec's a11y requirement for the badge announcement.
-  - `aria-live="polite"` on the Share link button ensures screen readers announce "Copied!" without being disruptive.
-  - Mount chain: this is a standalone page route — there is **no** `VALID_TABS` array here (the VALID_TABS pitfall applies only to pages where tab state lives in `?tab=` URL params, like `/agents/[id]` and skills). No tab whitelist needs updating.
-  - The `Markdown` component (`@devdigest/ui`) safely renders LLM-generated prose. Do NOT use `dangerouslySetInnerHTML`.
+  - The disclaimer (AC-12) must be inside the How to Run Locally section so it is always visible, not only on hover or in a collapsed state.
+  - `role="alert"` with `aria-live="polite"` on the incomplete-index badge satisfies the spec's a11y requirement.
+  - `aria-live="polite"` on the Share link button ensures screen readers announce "Copied!".
+  - Mount chain: standalone page route — there is **no** `VALID_TABS` array here.
+  - The `Markdown` component (`@devdigest/ui`) is confirmed in use today (e.g., `client/src/app/context-docs/_components/ContextDocsPreview/ContextDocsPreview.tsx`). Do NOT use `dangerouslySetInnerHTML`.
 
 ---
 
@@ -739,14 +835,16 @@ Wave 3 (serial):    T5 (needs T4)
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| `completeStructured` retry exhausted (LLM returns malformed JSON twice) | Generate returns error; previous tour preserved | AC-5 satisfied by construction — upsertTour is never called on throw |
+| `completeStructured` retry exhausted (LLM returns malformed JSON twice) | Generate returns 502; previous tour preserved | AC-5 satisfied by construction — upsertTour is never called on throw |
 | In-flight Set lost on process restart | Two concurrent LLM calls if one request was in-flight when the process crashed | Acceptable for single-instance deployment per boot-reaper contract |
-| `getFileRank` returns empty on degraded index | `readingPath` items all have `rank: 0` | Badge will show, informing user; ordering is still deterministic via `topFiles` |
-| `getTopFilesByRank` returns empty on degraded index | Empty `reading_path`; LLM still returns the other four sections | AC-10 badge covers this; spec edge case explicitly handled |
-| `reading_path` may contain files the LLM adds that were not in `topFiles` | Stored `reading_path` includes LLM-invented paths with `rank: 0` | Service assembles `readingPath` from `topFiles` (server-controlled), mapping LLM descriptions by file — LLM cannot add extra entries |
-| Naming collision with existing `Onboarding`/`OnboardingSection` in `contracts/knowledge.ts` | TypeScript export conflict if both are in the same barrel | New types are named `OnboardingTour`, `OnboardingTourSections`, `ReadingPathItem` — distinct names; no collision |
-| `VALID_TABS` pitfall (from INSIGHTS.md) for a tab-less page | None — not applicable | This is a standalone route, not a tab in an existing page. No VALID_TABS lookup exists for `/repos/[repoId]/onboarding-tour`. No action needed. |
+| `getFileRank` returns empty on degraded index | `readingPath` items all have `rank: 0` | Badge will show; ordering is still deterministic via `topFiles` |
+| `getTopFilesByRank` returns empty on degraded index | Empty `reading_path`; LLM still returns the other four sections | AC-10 badge covers this; `getFileRank` call guarded by `topFiles.length > 0` check |
+| `reading_path` may contain files the LLM adds that were not in `topFiles` | LLM-invented paths with `rank: 0` in stored result | Service assembles `readingPath` from `topFiles` (server-controlled), mapping LLM descriptions by file — LLM cannot add extra entries |
+| Naming collision with existing `Onboarding`/`OnboardingSection` in `contracts/knowledge.ts` | TypeScript export conflict | New types are named `OnboardingTour`, `OnboardingTourSections`, `ReadingPathItem` — distinct names; no collision |
+| `VALID_TABS` pitfall for a tab-less page | None — not applicable | Standalone route; no VALID_TABS lookup exists for this path. No action needed. |
 | `date-fns` dependency absent from client | Build error on relative-time formatting | Verify before importing; fall back to manual computation if absent |
+| Migration file timestamp collision | Two tasks writing migrations in one plan | T1 is the only schema-touching task in this plan — no intra-plan collision. Cross-feature collisions at merge time are resolved by regenerating the migration. |
+| `useActiveRepo()` null during repo load interpreted as "no clone path" | State C flickers or appears incorrectly before repos load | Explicit `reposLoaded` check gates State C; skeleton shown during load (see T5 red flags) |
 
 ---
 
@@ -761,3 +859,24 @@ Wave 3 (serial):    T5 (needs T4)
 - **T4**: `cd /Users/admin/dev-digest/client && pnpm tsc --noEmit` — zero errors; `useOnboardingTour` and `useGenerateTour` importable from `@/lib/hooks`.
 
 - **T5**: `cd /Users/admin/dev-digest/client && pnpm tsc --noEmit` — zero errors; `/repos/<repoId>/onboarding-tour` page renders without hydration errors (manual browser check or e2e verification).
+
+---
+
+## Cross-model review dispositions (deepseek, 2026-07-02)
+
+12 findings from the deepseek/deepseek-v4-flash staff-engineer review via OpenRouter.
+
+| Finding | Severity | Disposition | Detail |
+|---|---|---|---|
+| F1 | NOTE | **Accepted** — added to T3 | "Read-only dependencies" list added before T3's red flags: `repos/repository.ts` (RepoRepository.getById) and `container.repoIntel` facade are called but not owned. |
+| F2 | CRITICAL | **Accepted** — folded into T3 step 7 + red flags | Guard `getFileRank` call: `topFiles.length > 0 ? await getFileRank(repoId, topFiles) : []`. Without this, a degraded index with empty `topFiles` makes a vacuous DB call. |
+| F3 | CRITICAL | **Accepted** — folded into T5 task body + acceptance + red flags | `useActiveRepo()` returns `null` while repos are loading; interpreting `null` as "no clone path" causes a false State C flash. Added explicit `reposLoaded` gate: skeleton during load, State C only after repos are confirmed loaded. |
+| F4 | CRITICAL | **Accepted — clarified, not redesigned** — T4 hook + T5 component updated | The POST /generate call is synchronous and returns the full tour in the primary case. Hook now uses `setQueryData` on `{ tour }` response for immediate cache write. The `{ status: "in_progress" }` branch is rare (second concurrent session) and handled as a non-error toast in T5; no polling needed for the primary flow. |
+| F5 | WARNING | **Accepted** — folded into T3 service flow + error mapping table | Explicit error taxonomy added: `NotFoundError` → 404, `ValidationError` → 422, LLM/schema failures → `ExternalServiceError` → 502, `ConfigError` → re-throw → 500. Client relies on global mutation-error toast. |
+| F6 | WARNING | **Accepted** — folded into T2 `TourLLMSchema` definition | Added block comment: `// NOTE: rank is NOT in the LLM schema — injected server-side from getFileRank()`. Prevents an implementer from mistakenly adding a `rank` field to the schema sent to the LLM. |
+| F7 | NOTE | **Accepted** — one-line note added to Sequencing & risks table | Migration timestamp collision is not a risk for this plan (T1 is the only schema task); cross-feature collisions at merge time are resolved by regenerating. |
+| F8 | WARNING | **Rejected — false premise** | Finding claimed `Markdown` from `@devdigest/ui` does not exist. It is confirmed in use today: `client/src/app/context-docs/_components/ContextDocsPreview/ContextDocsPreview.tsx` and `client/src/app/skills/_components/SkillDetail/ContextTab.tsx` both import and render `<Markdown>`. No change. |
+| F9 | WARNING | **Accepted** — folded into T5 component render order | On `useOnboardingTour` `isError: true` (5xx), render `<ErrorState>` with `onRetry={() => refetch()}` and new i18n keys `error.title` / `error.body`. Empty pane on query error was a gap. |
+| F10 | WARNING | **Rejected — overengineering** | Finding requested `process.on('unhandledRejection')` cleanup for the `inFlight` Set on crash. The generation call is fully `await`ed inside `try/finally`; the `finally` block always runs on normal throw/return. Unhandled rejections cannot arise from this synchronous `await` chain. Adding a process-level error handler for this case is out of scope and would be inappropriate in the service layer. |
+| F11 | SUGGESTION | **Accepted** — folded into T3 routes.ts section | Per-route rate limit added to POST /generate: `config: { rateLimit: { max: 3, timeWindow: '1 minute' } }`, matching the `/pulls/:id/review` precedent. Cheap cost-control backstop that complements (not replaces) in-flight dedup. |
+| F12 | SUGGESTION | **Rejected — cosmetic** | Request to add line numbers to the `INJECTION_GUARD` constant reference. D3 already names the exact file and constant; line numbers would go stale on the next edit. No value added. |
