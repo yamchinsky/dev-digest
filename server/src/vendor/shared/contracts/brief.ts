@@ -143,11 +143,29 @@ export const SmartDiff = z.object({
 });
 export type SmartDiff = z.infer<typeof SmartDiff>;
 
-// ---- Composed PR Brief (pr_brief.json) ----
-export const PrBrief = z.object({
-  intent: Intent,
-  blast: BlastRadius,
-  risks: Risks,
-  history: PrHistory,
+// ---- Brief: generated PR Why + Risk synthesis (SPEC-03) ----
+
+export const ReviewFocusItem = z.object({
+  file: z.string(),
+  line: z.number().int().nullable(),
+  reason: z.string(),
 });
-export type PrBrief = z.infer<typeof PrBrief>;
+export type ReviewFocusItem = z.infer<typeof ReviewFocusItem>;
+
+/**
+ * Full PR brief DTO — stored in pr_brief.json and returned by both GET and POST.
+ * Includes the LLM-generated fields (what/why/risk_level/risks/review_focus)
+ * and the generation metadata (tokens_in/tokens_out/cost_usd/generated_at).
+ */
+export const BriefRecord = z.object({
+  what: z.string(),
+  why: z.string(),
+  risk_level: z.enum(['low', 'medium', 'high']),
+  risks: z.array(Risk),
+  review_focus: z.array(ReviewFocusItem),
+  tokens_in: z.number().int(),
+  tokens_out: z.number().int(),
+  cost_usd: z.number().nullable(),
+  generated_at: z.string(), // ISO 8601
+});
+export type BriefRecord = z.infer<typeof BriefRecord>;
