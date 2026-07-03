@@ -20,14 +20,14 @@ Three implementer instances over two dependency waves.
 | ID | Covers AC | Requirement | Acceptance criteria (measurable) |
 |---|---|---|---|
 | R1 | AC-1, AC-2 | `GET /pulls/:id/brief` returns `{ brief: BriefRecord \| null }` HTTP 200 in both the null (no row) and populated cases; no LLM call on GET | DB-backed `.it.test.ts`: null case → HTTP 200 body `{ brief: null }`; seeded case → HTTP 200 body matches the seeded row; mock LLM adapter receives 0 calls on GET |
-| R2 | AC-3 | `POST /pulls/:id/brief` returns HTTP 422 `intent_required` when no `pr_intent` row exists; no LLM call | DB-backed `.it.test.ts`: PR with no intent row → HTTP 422, `error.code === "intent_required"`, mock LLM adapter 0 calls |
+| R2 | AC-3 | `POST /pulls/:id/brief` returns HTTP 422 with `error.code === "validation_error"` and `error.details.code === "intent_required"` when no `pr_intent` row exists; no LLM call | DB-backed `.it.test.ts`: PR with no intent row → HTTP 422, response body `{ error: { code: "validation_error", details: { code: "intent_required" } } }`, mock LLM adapter 0 calls |
 | R3 | AC-4, AC-8 | LLM prompt assembled from intent text, blast summary, smart-diff file-group stats, linked issue, and agent context docs; no diff hunk bodies (no `+`/`-`-prefixed diff lines) in any message | Hermetic unit: supply mock inputs for all five sources; call `assembleBriefMessages`; assert all five represented in output messages; assert no `+`/`-`-prefixed diff line content |
 | R4 | AC-5 | Exactly one `completeStructured` call per `POST` generation | Hermetic unit: inject call-counting mock LLM; trigger generation; assert adapter received exactly 1 call |
 | R5 | AC-6, AC-7 | Grounding gate: filter `Risk.file_refs` against PR changed file set (drop empty-ref risks); drop `review_focus` entries whose `file` is outside the set; `POST` response includes `dropped_items` count | DB-backed `.it.test.ts`: mock LLM returns mixed valid/invalid file-ref items; persisted `BriefRecord.risks` + `review_focus` contain only grounded items; `POST` response `dropped_items ≥ 1` |
 | R6 | AC-9 | `tokens_in` in `POST` response ≤ 8 000 for the reference integration-test PR fixture | DB-backed `.it.test.ts`: mock LLM echoes `tokensIn` derived from the assembled prompt length; assert response `tokens_in ≤ 8000` |
-| R7 | AC-10 | Agent-level context docs collected from all workspace agents, deduped by `(repo_id, relative_path)` (first-occurrence wins), zero-byte files silently skipped | DB-backed `.it.test.ts`: two agents with overlapping paths + one zero-byte file; each unique path read exactly once from mock clone dir; zero-byte file absent from the assembled prompt |
-| R8 | AC-11 | All untrusted text (intent, linked issue, blast summary, smart-diff paths, context doc content) wrapped with `wrapUntrusted`; `INJECTION_GUARD` in system message | Hermetic unit: all five input types enclosed in `<untrusted …>` delimiters; system message contains the `INJECTION_GUARD` sentinel string |
-| R9 | AC-12, AC-13, AC-14, AC-15 | `PrBriefCard` renders three states (empty/generate, populated with usage line, 422-hint) and supports Regenerate with loading indicator | e2e: empty state visible with no content fields (AC-12); populated card is first element above Intent+Blast grid (AC-13); 422 hint state after no-intent POST (AC-14); Regenerate shows loading then updates content (AC-15) |
+| R7 | AC-10 | Agent-level context docs collected from all workspace agents in deterministic creation order, deduped by `(repo_id, relative_path)` (first-occurrence wins), zero-byte files silently skipped | DB-backed `.it.test.ts`: two agents with overlapping paths + one zero-byte file; each unique path read exactly once from mock clone dir; zero-byte file absent from the assembled prompt |
+| R8 | AC-11 | All untrusted text (intent, linked issue title+body, blast summary, smart-diff stats, context doc content) wrapped with `wrapUntrusted`; `INJECTION_GUARD` in system message | Hermetic unit: all five input types enclosed in `<untrusted …>` delimiters; system message contains the `INJECTION_GUARD` sentinel string |
+| R9 | AC-12, AC-13, AC-14, AC-15 | `PrBriefCard` renders three states (empty/generate, populated with usage line, 422-hint) and supports Regenerate with loading indicator; file links navigate to `?tab=diff&file=<path>` and the diff tab scrolls the target file card into view | e2e: empty state visible with no content fields (AC-12); populated card is first element above Intent+Blast grid (AC-13); 422 hint state after no-intent POST (AC-14); Regenerate shows loading then updates content (AC-15); file link click navigates to diff tab and matching FileCard is visible in viewport |
 
 ### Descoped ACs
 
@@ -43,21 +43,22 @@ AC-12, AC-13, AC-14, AC-15 → R9.
 | D2 | New `modules/brief/` module vs extending `modules/reviews/` | accepted — blast module is a standalone module for PR-scoped data; brief follows the same pattern; keeps reviews/ focused on agent review runs and findings |
 | D3 | `BriefService` instantiates `BlastService(this.container)` and `ReviewService(this.container)` internally to get blast summary + file set + smart-diff stats | accepted — both peer services take only `Container` (no circular dep); avoids duplicating blast composition logic and smart-diff file-group retrieval; trade-off: brief module has runtime imports on blast and reviews modules |
 | D4 | `BriefLLMSchema` (raw LLM output type) lives in `modules/brief/helpers.ts` (module-internal); `BriefRecord` and `ReviewFocusItem` live in `contracts/brief.ts` (shared) | accepted — applies the SPEC-02 arch-review lesson: LLM decoder schema is not a domain contract; client never needs to know the raw LLM type |
-| D5 | Inline `resolveLinkedIssue` logic in `modules/brief/helpers.ts` | accepted — avoids cross-module import from `modules/reviews/intent.ts`; the function is ~20 lines + one regex; stable enough to duplicate |
-| D6 | File links in `PrBriefCard` navigate to `?tab=diff` (no per-file anchor exists in the current `DiffTab`) | accepted — the current DiffTab has no file anchor / scroll mechanism; `useRouter` + `useParams` + `useSearchParams` builds `?tab=diff` URL in the card component without prop drilling through OverviewTab |
-| D7 | Per-source character caps during prompt assembly (no pre-call truncation): blast summary ≤ 2 000 chars; linked issue body ≤ 1 500 chars; each context doc ≤ 1 500 chars; intent text ≤ 3 000 chars | accepted — keeps assembled prompt well under the 8 000-token budget without violating the spec's "no pre-call truncation" non-goal (caps are applied during assembly, not on the raw LLM call) |
+| D5 | `resolveLinkedIssue` — export from `modules/reviews/intent.ts` and import in `modules/brief/helpers.ts` | partially accepted — cross-module import of a helper follows the established `RepoRepository` cross-module precedent; exporting the existing function (one-line change) is cleaner than duplicating 20 lines; T2 owns the export addition in `reviews/intent.ts` |
+| D6 | File links in `PrBriefCard` navigate to `?tab=diff&file=<path>`; `DiffTab` reads the `file` param and scrolls the matching `FileCard` into view via a stable `id` on each `FileCard` wrapper in `DiffViewer` | accepted — file-level anchoring is achievable with minimal changes to two shared components; rendered as real `<a href>` for middle-click/copy semantics with `onClick` SPA navigation |
+| D7 | Per-source character caps during prompt assembly (no pre-call truncation): blast summary ≤ 2 000 chars; linked issue body ≤ 1 500 chars; each context doc ≤ 1 500 chars; intent text ≤ 3 000 chars | accepted — keeps assembled prompt well under the 8 000-token budget without violating the spec's "no pre-call truncation" non-goal |
 
 ## Affected packages / modules
 
 - **server** — new `modules/brief/` (routes.ts, service.ts, repository.ts, helpers.ts);
-  update `modules/index.ts`
+  one-line `export` addition in `modules/reviews/intent.ts`; update `modules/index.ts`
 - **shared (dual-vendored)** — extend `server/src/vendor/shared/contracts/brief.ts` and
   `client/src/vendor/shared/contracts/brief.ts` (byte-identical): remove `PrBrief`
   aggregate stub; add `ReviewFocusItem`, `BriefRecord`; no barrel update needed
   (brief.ts already re-exported via `export * from './contracts/brief.js'` in both index.ts files)
 - **client** — new `lib/hooks/brief.ts`; update `lib/hooks/index.ts`; new
   `_components/PrBriefCard/{PrBriefCard.tsx,styles.ts,index.ts}`; update
-  `_components/OverviewTab/OverviewTab.tsx`; new `messages/en/brief.json`;
+  `_components/OverviewTab/OverviewTab.tsx`; update `_components/DiffTab/DiffTab.tsx`;
+  update `components/diff-viewer/DiffViewer/DiffViewer.tsx`; new `messages/en/brief.json`;
   update `src/types/index.ts`
 
 ---
@@ -137,6 +138,8 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   - `cd /Users/admin/dev-digest/client && pnpm tsc --noEmit` — zero errors.
   - `BriefRecord` and `ReviewFocusItem` importable from `@devdigest/shared` in
     a typecheck sense; `PrBrief` no longer exported.
+  - Spot check: `grep -r "PrBrief" /Users/admin/dev-digest/server/src /Users/admin/dev-digest/client/src`
+    returns only comments (no type usages).
 
 - **Depends-on**: none
 
@@ -163,6 +166,7 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   - `server/src/modules/brief/repository.ts` (new)
   - `server/src/modules/brief/helpers.ts` (new)
   - `server/src/modules/index.ts`
+  - `server/src/modules/reviews/intent.ts` (one-line `export` addition only — D5)
 
 - **Read-only dependencies (not owned — do not modify)**:
   - `server/src/modules/blast/service.ts` (`BlastService.blastForPull`) — instantiate internally
@@ -177,10 +181,33 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
 - **Task**:
 
-  **`helpers.ts`** — module-internal utilities:
-
+  **`server/src/modules/reviews/intent.ts`** — add `export` keyword to
+  `resolveLinkedIssue` (D5). Change:
   ```ts
-  // BriefLLMSchema: raw LLM output type (module-internal, never shared).
+  async function resolveLinkedIssue(
+  ```
+  to:
+  ```ts
+  export async function resolveLinkedIssue(
+  ```
+  No other changes to this file.
+
+  **`helpers.ts`** — module-internal utilities. This file contains the LLM schema,
+  path normalizer, prompt assembler, grounding gate, and the linked-issue resolver
+  import.
+
+  **`normalizePath(p: string): string`** — canonicalize a file path to repo-relative
+  POSIX before grounding-set membership checks. Strips a leading `./`, converts
+  `\` to `/`, trims whitespace. Used on BOTH the prFileSet entries AND the
+  LLM-returned `file_refs` / `review_focus.file` values before comparison:
+  ```ts
+  export function normalizePath(p: string): string {
+    return p.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+  }
+  ```
+
+  **`BriefLLMSchema`** — raw LLM output type (module-internal, never shared):
+  ```ts
   // No .min(1) on strings — OpenAI strict JSON schema rejects length constraints.
   export const BriefLLMSchema = z.object({
     what: z.string(),
@@ -202,36 +229,39 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   export type BriefLLMOutput = z.infer<typeof BriefLLMSchema>;
   ```
 
-  `assembleBriefMessages(inputs: BriefInputs): { system: string; user: string }`
+  **`assembleBriefMessages(inputs: BriefInputs): { system: string; user: string }`**
   — builds the LLM messages from typed inputs. `BriefInputs` carries: `intent`
   (text), `blastSummary`, `smartDiffStats` (text serialisation of file-group role
   + path + additions + deletions, no hunk content), `linkedIssue`
-  (`{ title: string; body: string } | null`), and `contextDocContents`
-  (`string[]`). Character caps applied here before wrapping:
-  - `intent.slice(0, 3000)` before `wrapUntrusted('intent', ...)`
-  - `blastSummary.slice(0, 2000)` before `wrapUntrusted('blast-summary', ...)`
-  - `linkedIssue.body.slice(0, 1500)` before `wrapUntrusted('linked-issue', ...)`
-  - each context doc `.slice(0, 1500)` before `wrapUntrusted('context-doc-N', ...)`
-  - smart-diff stats: already structured text (no body content), no cap needed
+  (`{ title: string; body: string } | null`), and `contextDocContents` (`string[]`).
 
-  The system message must include `INJECTION_GUARD`:
+  All five untrusted surfaces MUST be wrapped (AC-11) — wrap each explicitly:
+  1. `wrapUntrusted('intent', intent.slice(0, 3_000))`
+  2. `wrapUntrusted('blast-summary', blastSummary.slice(0, 2_000))`
+  3. `wrapUntrusted('smart-diff', smartDiffStats)` — stats block is structured
+     but contains contributor-controlled file paths
+  4. `wrapUntrusted('linked-issue', `${linkedIssue.title}\n\n${linkedIssue.body.slice(0, 1_500)}`)` when linkedIssue non-null; entire slot omitted when null
+  5. `wrapUntrusted(\`context-doc-${N}\`, content.slice(0, 1_500))` per context doc
+
+  System message must include `INJECTION_GUARD`:
   ```ts
   const system = `You are a senior code reviewer producing a structured PR brief. ${INJECTION_GUARD}`;
   ```
 
-  `groundBrief(llmOutput: BriefLLMOutput, prFileSet: Set<string>)`:
+  **`groundBrief(llmOutput: BriefLLMOutput, prFileSet: Set<string>)`**:
   ```
   → { risks: Risk[], review_focus: ReviewFocusItem[], droppedItems: number }
   ```
-  Implements AC-6 gate:
-  1. For each risk: filter `file_refs` to files in `prFileSet`; drop risk if
-     `file_refs` is empty after filter.
-  2. For each `review_focus` entry: drop if `file` not in `prFileSet`.
-  3. `droppedItems` = count of dropped risks + dropped focus entries.
+  Implements AC-6 gate. IMPORTANT — normalize ALL paths before comparison:
+  1. Build `normalizedSet = new Set([...prFileSet].map(normalizePath))`.
+  2. For each risk: `filteredRefs = risk.file_refs.map(normalizePath).filter(f => normalizedSet.has(f))`; drop risk when `filteredRefs` is empty, else keep with filtered refs.
+  3. For each `review_focus` entry: drop when `normalizePath(entry.file)` is not in `normalizedSet`.
+  4. `droppedItems` = count of dropped risks + dropped focus entries.
 
-  `resolveLinkedIssue(container, repoRow, prBody)` — inlined from
-  `modules/reviews/intent.ts`; same logic and same `LINKED_ISSUE_RE` regex;
-  never throws.
+  Re-export `resolveLinkedIssue` from `reviews/intent.ts`:
+  ```ts
+  export { resolveLinkedIssue } from '../reviews/intent.js';
+  ```
 
   **`repository.ts`** — reads and writes the `pr_brief` table and ancillary PR data:
 
@@ -241,8 +271,21 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
     async getPull(workspaceId: string, prId: string): Promise<PullRow | undefined>
     async getIntent(prId: string): Promise<Intent | undefined>
-    async getBrief(prId: string): Promise<BriefRecord | null>
-    // jsonb typed via .$type<BriefRecord>(); returns null when no row exists.
+
+    async getBrief(
+      prId: string,
+      logger?: { warn: (msg: string) => void },
+    ): Promise<BriefRecord | null> {
+      const [row] = await this.db
+        .select().from(t.prBrief).where(eq(t.prBrief.prId, prId));
+      if (!row) return null;
+      const parsed = BriefRecord.safeParse(row.json);
+      if (!parsed.success) {
+        logger?.warn(`pr_brief row for prId=${prId} failed schema validation — returning null`);
+        return null;
+      }
+      return parsed.data;
+    }
 
     async upsertBrief(prId: string, json: BriefRecord): Promise<void>
     // INSERT INTO pr_brief (pr_id, json) VALUES (…) ON CONFLICT (pr_id)
@@ -250,15 +293,14 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   }
   ```
 
-  `getBrief` queries `t.prBrief` where `prBriefRow.prId === prId`; parse the
-  stored jsonb with `BriefRecord.parse(row.json)` before returning to ensure
-  shape integrity.
+  `getBrief` uses `BriefRecord.safeParse` (not `.parse`) so a malformed stored
+  jsonb logs a warning and returns `null` — GET always responds HTTP 200.
 
   **`service.ts`** — business logic:
 
   `BriefService(container: Container)` — constructor; creates:
   - `this.repo = new BriefRepository(container.db)`
-  - `this.repoRepo = new RepoRepository(container.db)` (for getById + getClonePathsByIds)
+  - `this.repoRepo = new RepoRepository(container.db)`
 
   `getBrief(workspaceId: string, prId: string)`:
   1. `const pull = await this.repo.getPull(workspaceId, prId)`; throw `NotFoundError`
@@ -267,13 +309,19 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
   `generateBrief(workspaceId: string, prId: string)`:
   1. `const pull = await this.repo.getPull(workspaceId, prId)`; throw `NotFoundError`.
-  2. `const intent = await this.repo.getIntent(prId)`; if absent throw
-     `AppError('intent_required', 'Compute the PR intent before generating a brief.', 422)`.
-     (Use `AppError` directly with a 422 status so the global error handler emits the
-     correct `ApiErrorBody` envelope with `code: "intent_required"`.)
+  2. `const intent = await this.repo.getIntent(prId)`; if absent throw:
+     ```ts
+     throw new ValidationError(
+       'Compute the PR intent before generating a brief.',
+       { code: 'intent_required' },
+     );
+     ```
+     This produces the envelope `{ error: { code: 'validation_error', message: '…',
+     details: { code: 'intent_required' } } }` — matching the platform taxonomy's
+     `ValidationError` constructor: `super('validation_error', message, 422, details)`.
   3. `const repo = await this.repoRepo.getById(workspaceId, pull.repoId)`;
      throw `NotFoundError` when absent.
-  4. Gather inputs in parallel — note the three independent fetch groups:
+  4. Gather inputs in parallel:
      ```ts
      const [blast, smartDiff, linkedIssue] = await Promise.all([
        new BlastService(this.container).blastForPull(workspaceId, prId),
@@ -281,20 +329,30 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
        resolveLinkedIssue(this.container, repo, pull.body),
      ]);
      ```
-  5. Build `prFileSet: Set<string>` = union of:
-     - `blast.changed_symbols.map(s => s.file)`
-     - `smartDiff.groups.flatMap(g => g.files.map(f => f.path))`
-  6. Collect context docs (AC-10):
+  5. Build `prFileSet: Set<string>` using normalized paths:
+     ```ts
+     const rawFilePaths = [
+       ...blast.changed_symbols.map(s => s.file),
+       ...smartDiff.groups.flatMap(g => g.files.map(f => f.path)),
+     ];
+     const prFileSet = new Set(rawFilePaths.map(normalizePath));
+     ```
+  6. Collect context docs in deterministic order (AC-10):
      ```
      a. const agents = await this.container.agentsRepo.list(workspaceId)
-     b. For each agent, getContextDocPaths(agent.id); merge + dedup by (repoId, relativePath)
-     c. Batch-fetch clone paths via this.repoRepo.getClonePathsByIds(uniqueRepoIds)
-     d. Read files: skip missing (warn in server log), skip zero-byte (silent)
-     e. contextDocContents: string[] of successfully read + non-empty files
+        // list() returns rows in DB insertion order; sort by agent.id (UUID) for
+        // deterministic ordering if multiple agents were inserted in the same transaction.
+     b. For each agent in order, call getContextDocPaths(agent.id)
+        // paths are already ordered by `order` ASC inside each agent.
+     c. Merge + dedup by normalizePath(repoId + ':' + relativePath); first-occurrence wins.
+     d. Batch-fetch clone paths: this.repoRepo.getClonePathsByIds(uniqueRepoIds).
+     e. Read files with existsSync + readFile; skip missing (warn in server log), skip zero-byte (silent).
+     f. contextDocContents: string[] of successfully read + non-empty file contents.
      ```
   7. Build `smartDiffStats`: serialise each `SmartDiffGroup` as plain text:
      `[role]\n<path> (+N -N)\n…` — no pseudocode_summary, no hunk bodies, no findings.
-  8. Build `intentText`: `${intent.intent}\nIn scope: ${intent.in_scope.join(', ')}\nOut of scope: ${intent.out_of_scope.join(', ')}`.
+  8. Build `intentText`:
+     `${intent.intent}\nIn scope: ${intent.in_scope.join(', ')}\nOut of scope: ${intent.out_of_scope.join(', ')}`.
   9. `const messages = assembleBriefMessages({ intent: intentText, blastSummary: blast.summary, smartDiffStats, linkedIssue, contextDocContents })`.
   10. `const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'risk_brief')`.
   11. `const llm = await this.container.llm(provider)` — wrap in try/catch;
@@ -318,11 +376,11 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   15. `await this.repo.upsertBrief(prId, briefRecord)`.
   16. Return `{ brief: briefRecord, dropped_items: droppedItems }`.
 
-  **Error mapping** (global error handler in `app.ts` handles all of these):
+  **Error mapping** (global error handler in `app.ts` handles all):
   - `NotFoundError` → 404
-  - `AppError` with status 422 → 422 + `error.code`
+  - `ValidationError` → 422 with `{ error: { code: 'validation_error', details: { code: 'intent_required' } } }`
   - `ExternalServiceError` → 502
-  - `ConfigError` → re-thrown → 500
+  - `ConfigError` → 500
 
   **`routes.ts`** — thin Fastify plugin:
 
@@ -337,11 +395,10 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }
        → getContext → service.generateBrief(workspaceId, id)
        → 200 { brief: BriefRecord, dropped_items: number }
-       OR 422 { error: { code: 'intent_required', message: '…' } }
   ```
 
-  Response schemas (must be registered with `serializerCompiler` — the framework
-  does this when the `response` key is present in the route schema):
+  Response schemas (registered automatically via `serializerCompiler` when the
+  `response` key is present — this is the runtime validation gate per INSIGHTS):
   ```ts
   const BriefGetResponse = z.object({ brief: BriefRecord.nullable() });
   const BriefPostResponse = z.object({
@@ -350,9 +407,7 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   });
   ```
 
-  Both routes call `getContext(container, req)` first. The `serializerCompiler`
-  registration is automatic when the `response` key is present — this is the
-  runtime validation gate per the INSIGHTS requirement.
+  Both routes call `getContext(container, req)` first.
 
   **`server/src/modules/index.ts`** — add one import and one entry:
   ```ts
@@ -363,43 +418,48 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
 - **Acceptance**:
   - `cd /Users/admin/dev-digest/server && pnpm tsc --noEmit` — zero errors.
-  - `curl -s http://localhost:3001/pulls/<valid-prId>/brief` with a valid workspace
-    cookie returns `{ "brief": null }` for a PR without a seeded row.
-  - `curl -s -X POST http://localhost:3001/pulls/<prId-no-intent>/brief` returns
-    HTTP 422 with body `{ "error": { "code": "intent_required", … } }`.
+  - `curl -s -H "Cookie: <ws-cookie>" http://localhost:3001/pulls/<valid-prId>/brief`
+    returns `{ "brief": null }` for a PR without a seeded row (HTTP 200).
+  - `curl -s -X POST … /pulls/<no-intent-prId>/brief` returns HTTP 422 with body
+    `{ "error": { "code": "validation_error", "details": { "code": "intent_required" } } }`.
   - Hermetic unit: inject mock LLM → trigger generation → assert exactly 1
-    `completeStructured` call recorded.
+    `completeStructured` call; assert mock LLM messages contain all five
+    `<untrusted …>` wrappers including `source="linked-issue"` and `source="smart-diff"`.
 
 - **Depends-on**: T1
 
 - **Red flags**:
-  - The `AppError` constructor takes `(code: string, message: string, statusCode: number)` —
-    verify the exact signature in `platform/errors.ts` before using it for the 422 path.
-    If `AppError` doesn't accept a status, use `ValidationError` from `errors.ts` but
-    then add a special error-to-code mapping so the response body carries `intent_required`.
-    Alternatively, throw a new class `BriefPreconditionError extends AppError`. Verify
-    the actual `AppError` taxonomy first.
-  - `BriefRecord.parse(row.json)` in `getBrief` is the runtime schema gate; if the
-    stored jsonb is malformed (e.g. from a failed past write), this will throw —
-    catch and return null or re-throw as `ExternalServiceError` based on team preference.
+  - **Path normalization is mandatory on both sides**: call `normalizePath()` on every
+    path before inserting into `prFileSet` AND on every LLM-returned `file_refs` /
+    `review_focus.file` value before grounding comparison. Without this,
+    `./src/foo.ts` ≠ `src/foo.ts` and valid risks are silently dropped.
+  - **`ValidationError` for intent-required, NOT `AppError`**: verify the exact
+    `ValidationError` constructor in `platform/errors.ts` before using it:
+    `new ValidationError(message, details?)` → `super('validation_error', message, 422, details)`.
+    The `intent_required` discriminator lives in `details: { code: 'intent_required' }`.
+    The response envelope is `{ error: { code: 'validation_error', message: '…', details: { code: 'intent_required' } } }`.
+  - **`getBrief` uses `safeParse`, not `parse`**: a malformed stored jsonb must
+    log a warning (with `prId`) and return `null`, never throw — GET must always
+    respond HTTP 200. Pass `this.container.log` (or equivalent) as the logger.
+  - **`resolveLinkedIssue` import path**: it is exported from `../reviews/intent.js`
+    (ESM `.js` suffix required). Confirm the export was added before importing.
+  - **Context-doc ordering (F6)**: the dedup key is
+    `normalizePath(repoId + ':' + relativePath)`. First-occurrence wins. Agents ordered
+    by `agentsRepo.list()` insertion order (sort by `agent.id` if needed for stability).
+    Docs within each agent already ordered by `order` ASC.
   - ESM imports: all internal server imports use `.js` suffix.
-  - `BlastService` and `ReviewService` are instantiated with `new BlastService(this.container)`
-    — they do NOT need to be cached; each call creates a fresh instance. This is cheap
-    since services hold no expensive resources.
-  - The `maxRetries: 1` on `completeStructured` means up to 2 attempts total; with
-    `strict: true` JSON schema enforcement, the first attempt almost always succeeds.
-    If both attempts fail, `completeStructured` throws `ExternalServiceError` → HTTP 502.
-  - Character caps are enforced in `assembleBriefMessages` (step 9). Do NOT apply
-    them in the service layer — keep prompt assembly pure and testable in `helpers.ts`.
-  - `dropped_items` is returned in the POST response only; it must NOT be stored in
-    `pr_brief.json`.
-  - The `pr_brief` table has `json jsonb NOT NULL` — Drizzle column type is `jsonb('json').$type<BriefRecord>()`. The column name in the table schema is literally `json`.
+  - `BriefLLMSchema` must NOT use `.min(1)` on any string field — OpenAI strict
+    JSON schema rejects `minLength` constraints; Zod validates after the call.
+  - `dropped_items` is returned in the POST response only; must NOT be stored
+    in `pr_brief.json`.
+  - The `pr_brief` table column is `json jsonb NOT NULL`. In Drizzle:
+    `jsonb('json').$type<BriefRecord>()`. The Drizzle row field is `.json`.
   - Rate limit for POST brief (5/min) is tighter than review (10/min) because each
-    call makes an LLM call; the brief is cheap but not free.
+    call makes an LLM call.
 
 ---
 
-### T3 — Client: hooks + PrBriefCard + OverviewTab mount · type: ui · covers: R9
+### T3 — Client: hooks + PrBriefCard + OverviewTab mount + file scroll · type: ui · covers: R9
 
 - **Owned paths**:
   - `client/src/lib/hooks/brief.ts` (new)
@@ -408,6 +468,8 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   - `client/src/app/repos/[repoId]/pulls/[number]/_components/PrBriefCard/styles.ts` (new)
   - `client/src/app/repos/[repoId]/pulls/[number]/_components/PrBriefCard/index.ts` (new)
   - `client/src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/OverviewTab.tsx`
+  - `client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.tsx`
+  - `client/src/components/diff-viewer/DiffViewer/DiffViewer.tsx`
   - `client/messages/en/brief.json` (new)
 
 - **Skills (mandatory)**: `react-best-practices`, `next-best-practices`, `frontend-architecture`, `typescript-expert`
@@ -482,80 +544,226 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   }
   ```
 
-  **`PrBriefCard.tsx`** — feature component. States in render order:
+  **`components/diff-viewer/DiffViewer/DiffViewer.tsx`** — add `targetFile` prop;
+  wrap each `FileCard` in a stable-id div; auto-expand the matching file:
 
-  *Loading (query pending):*
   ```tsx
-  if (isLoading) return <Skeleton height={120} />;
+  export function DiffViewer({
+    files,
+    commenting,
+    targetFile,         // NEW prop
+  }: {
+    files: PrFile[];
+    commenting?: DiffCommentApi;
+    targetFile?: string;
+  }) {
+    const t = useTranslations("shell");
+    if (!files || files.length === 0) {
+      return <div style={s.empty}>{t("diffViewer.noChangedFiles")}</div>;
+    }
+    return (
+      <div style={s.list}>
+        {files.map((f, i) => (
+          <div key={f.path || i} id={`diff-file-${encodeURIComponent(f.path)}`}>
+            <FileCard
+              file={f}
+              commenting={commenting}
+              defaultOpen={f.path === targetFile || undefined}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
   ```
 
-  *Empty state (brief is null, no ongoing mutation error):*
+  The `id` attribute on the wrapper div is the stable anchor used by the scroll
+  effect in `DiffTab`. `key` changes from `i` to `f.path || i` for stable DOM
+  identity. `defaultOpen` is passed `undefined` (not `false`) for non-target files
+  to preserve the existing `AUTO_EXPAND_MAX_LINES` auto-rule in `FileCard`.
+
+  **`_components/DiffTab/DiffTab.tsx`** — read `file` URL param; pass `targetFile`
+  to `DiffViewer`; add scroll effect:
+
   ```tsx
-  if (!data?.brief && !generate.error) {
+  // Add to existing imports:
+  import { useSearchParams } from "next/navigation";
+
+  export function DiffTab({ prId, filesCount, files, canComment, onOpenFinding }: DiffTabProps) {
+    const searchParams = useSearchParams();
+    const targetFile = searchParams.get("file") ?? undefined;
+
+    // Scroll the target FileCard into view after the diff renders.
+    React.useEffect(() => {
+      if (!targetFile) return;
+      const id = `diff-file-${encodeURIComponent(targetFile)}`;
+      const timer = setTimeout(() => {
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }, [targetFile]);
+
+    // ...existing hook calls (commenting API, etc.)...
+
     return (
-      <div>
-        <EmptyState icon="FileText" title={t("empty.title")} body={t("empty.body")} />
-        <Button kind="primary" loading={generate.isPending}
+      <section>
+        {/* ...existing SectionLabel... */}
+        <DiffViewer files={files} commenting={commentingApi} targetFile={targetFile} />
+        {/* ...existing SmartDiffViewer... */}
+      </section>
+    );
+  }
+  ```
+
+  The 100 ms delay allows the diff content to paint before scrolling. `DiffTab` is
+  always rendered inside the `<Suspense>` boundary already present in `page.tsx`
+  (`PRDetailPage` wraps `PRDetailPageInner` in `<Suspense>`) — `useSearchParams()`
+  is safe here without an additional boundary.
+
+  **`PrBriefCard.tsx`** — feature component. States in render order:
+
+  ```tsx
+  "use client";
+  import React from "react";
+  import { useParams, useSearchParams, useRouter } from "next/navigation";
+  import { useTranslations } from "next-intl";
+  import { useBrief, useGenerateBrief } from "@/lib/hooks/brief";
+  import { ApiError } from "@/services/api";
+  // import styles, Skeleton, Button, EmptyState from @devdigest/ui
+
+  export function PrBriefCard({ prId }: { prId: string }) {
+    const params = useParams<{ repoId: string; number: string }>();
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const t = useTranslations("brief");
+    const { data, isLoading } = useBrief(prId);
+    const generate = useGenerateBrief(prId);
+
+    // Build the diff-tab URL for a given file path (D6).
+    // Real <a href> enables middle-click / copy; onClick overrides for SPA nav.
+    const diffUrl = (file: string) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.set("tab", "diff");
+      sp.set("file", file);
+      return `/repos/${params.repoId}/pulls/${params.number}?${sp.toString()}`;
+    };
+
+    if (isLoading) return <Skeleton height={120} />;
+
+    // 422 intent-required hint (AC-14).
+    // IMPORTANT: MutationCache.onError in providers/index.tsx fires notify.error
+    // unconditionally for ALL mutation errors (line 42: `onError: (err) =>
+    // notify.error(errorMessage(err))`). There is no per-mutation suppression.
+    // The 422 WILL both toast globally AND render the inline hint. This is the
+    // accepted double-signal pattern — do NOT modify providers.tsx to suppress it.
+    const isIntentRequired =
+      generate.error instanceof ApiError &&
+      generate.error.status === 422 &&
+      (generate.error.details as { code?: string } | undefined)?.code === 'intent_required';
+
+    if (isIntentRequired) {
+      return (
+        <div style={s.card}>
+          <EmptyState icon="FileText" title={t("empty.title")} body={t("intentRequired")} />
+        </div>
+      );
+    }
+
+    // Empty state — no brief yet (AC-12)
+    if (!data?.brief) {
+      return (
+        <div style={s.card}>
+          <EmptyState icon="FileText" title={t("empty.title")} body={t("empty.body")} />
+          <Button kind="primary" loading={generate.isPending} onClick={() => generate.mutate()}>
+            {t("actions.generate")}
+          </Button>
+        </div>
+      );
+    }
+
+    // Populated brief (AC-13)
+    const brief = data.brief;
+    return (
+      <div style={s.card}>
+        {/* risk_level badge */}
+        <span
+          style={s.riskBadge[brief.risk_level]}
+          aria-label={t("a11y.riskBadge", { level: t(`riskLevel.${brief.risk_level}`) })}
+        >
+          {t(`riskLevel.${brief.risk_level}`)}
+        </span>
+
+        <section><h3>{t("sections.what")}</h3><p>{brief.what}</p></section>
+        <section><h3>{t("sections.why")}</h3><p>{brief.why}</p></section>
+
+        {/* risks list */}
+        <section>
+          <h3>{t("sections.risks")}</h3>
+          <ul>
+            {brief.risks.map((risk, i) => (
+              <li key={i}>
+                <strong>{risk.title}</strong> — {risk.explanation}
+                {risk.file_refs.length > 0 && (
+                  <ul>
+                    {risk.file_refs.map((file) => (
+                      <li key={file}>
+                        {/* Real <a> for middle-click/copy; SPA nav via onClick */}
+                        <a
+                          href={diffUrl(file)}
+                          aria-label={t("a11y.fileLink", { file })}
+                          onClick={(e) => { e.preventDefault(); router.push(diffUrl(file)); }}
+                        >
+                          {file}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* review_focus list */}
+        <section>
+          <h3>{t("sections.reviewFocus")}</h3>
+          <ol>
+            {brief.review_focus.map((item, i) => (
+              <li key={i}>
+                <a
+                  href={diffUrl(item.file)}
+                  aria-label={t("a11y.fileLink", { file: item.file })}
+                  onClick={(e) => { e.preventDefault(); router.push(diffUrl(item.file)); }}
+                >
+                  {item.file}{item.line != null ? `:${item.line}` : ""}
+                </a>
+                {" — "}{item.reason}
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* usage line (AC-13) */}
+        <p style={s.usage}>
+          {t("usage", {
+            tokensIn: brief.tokens_in,
+            tokensOut: brief.tokens_out,
+            costUsd: brief.cost_usd != null ? `$${brief.cost_usd.toFixed(4)}` : "—",
+          })}
+        </p>
+
+        {/* Regenerate (AC-15) */}
+        <Button kind="secondary" loading={generate.isPending} disabled={generate.isPending}
           onClick={() => generate.mutate()}>
-          {t("actions.generate")}
+          {t("actions.regenerate")}
         </Button>
       </div>
     );
   }
   ```
 
-  *422 intent-required hint (AC-14):*
-  The `useMutation` error surface: when POST returns 422, `api.post` throws an
-  `ApiError` with `status === 422` and `code === "intent_required"`. The card
-  checks `generate.error` — if it is an `ApiError` with `status === 422` and
-  `error.code === "intent_required"`, render the hint state:
-  ```tsx
-  if (generate.error instanceof ApiError && generate.error.status === 422) {
-    return (
-      <div>
-        <EmptyState icon="FileText" title={t("empty.title")} body={t("intentRequired")} />
-      </div>
-    );
-  }
-  ```
-  (The global mutation-error toast is suppressed for 422 per the client AGENTS.md
-  policy — the card renders its own inline hint for this case. Verify that the
-  global policy only toasts on `0` and `5xx` before adding extra suppression.)
-
-  *Populated brief (AC-13):*
-  ```tsx
-  const brief = data.brief!; // non-null after the empty-state guard
-  const navigateToDiff = () => {
-    // navigate to the diff tab via URL param — no prop needed from OverviewTab
-    const sp = new URLSearchParams(searchParams.toString());
-    sp.set("tab", "diff");
-    router.replace(`/repos/${repoId}/pulls/${number}?${sp.toString()}`);
-  };
-  ```
-
-  - Risk level badge: colour-coded (`low`=green, `medium`=amber, `high`=red) with
-    `aria-label={t("a11y.riskBadge", { level: t("riskLevel." + brief.risk_level) })}`.
-  - `risks[]` list: each item rendered as `<li>`; each `file_ref` in `risk.file_refs`
-    as a `<button onClick={navigateToDiff}>` with `aria-label={t("a11y.fileLink", { file })}`.
-  - `review_focus[]` ordered list: each item formatted as `file[:line] — reason`; the
-    file portion is a `<button onClick={navigateToDiff}>` with accessible label.
-  - Usage line: format tokens and cost via `t("usage", { tokensIn: brief.tokens_in, tokensOut: brief.tokens_out, costUsd: brief.cost_usd != null ? `$${brief.cost_usd.toFixed(4)}` : '—' })`.
-  - Regenerate button: `<Button kind="secondary" loading={generate.isPending} disabled={generate.isPending} onClick={() => generate.mutate()}>{t("actions.regenerate")}</Button>`.
-    Must be keyboard-operable (it's a `<Button>` — this is satisfied by construction).
-
-  `PrBriefCard` receives `prId: string`. It uses:
-  ```ts
-  const params = useParams<{ repoId: string; number: string }>();
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const { repoId, number } = params;
-  const { data, isLoading } = useBrief(prId);
-  const generate = useGenerateBrief(prId);
-  const t = useTranslations("brief");
-  ```
-
   **`OverviewTab.tsx`** — insert `PrBriefCard` as the FIRST rendered child,
-  before the Intent+Blast grid:
+  before the Intent+Blast grid (AC-13):
 
   ```tsx
   import { PrBriefCard } from "../PrBriefCard";
@@ -565,7 +773,6 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
       <>
         {prId && <PrBriefCard prId={prId} />}
 
-        {/* Two-column card grid: Intent (left) + Blast Radius (right) */}
         {prId && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "start" }}>
             <IntentCard prId={prId} />
@@ -584,10 +791,6 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   }
   ```
 
-  The `PrBriefCard` block must appear in DOM order before the grid container
-  (AC-13: "first element in the Overview tab body, above the IntentCard+BlastRadiusCard
-  grid container").
-
   **`PrBriefCard/index.ts`**:
   ```ts
   export { PrBriefCard } from "./PrBriefCard";
@@ -595,44 +798,48 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
 
 - **Acceptance**:
   - `cd /Users/admin/dev-digest/client && pnpm tsc --noEmit` — zero errors.
-  - Navigate to any PR Overview tab with no `pr_brief` row: `PrBriefCard` empty-state
-    visible above the grid; no `what`/`why`/`risk_level` elements in DOM.
-  - Navigate to any PR Overview tab with a seeded `pr_brief` row: `PrBriefCard` renders
-    first (before IntentCard+BlastRadiusCard grid in DOM order); `risk_level` badge,
-    `risks` list, `review_focus` list, and usage line are visible.
-  - Click "Generate Brief" on a PR with no `pr_intent` row: the 422 hint-state renders
-    with text referencing intent computation; no generic error toast.
-  - Regenerate button: clicking it shows a loading state; on mock POST resolve, the brief
-    content updates without page reload.
+  - PR Overview tab with no `pr_brief` row: `PrBriefCard` empty-state visible
+    above the grid; no `what`/`why`/`risk_level` elements in DOM.
+  - PR Overview tab with seeded `pr_brief` row: `PrBriefCard` renders first
+    (before IntentCard+BlastRadiusCard grid in DOM order); risk badge, risks list,
+    review_focus list, and usage line all visible.
+  - Click a file link in `risks` or `review_focus`: page navigates to diff tab;
+    the element with `id="diff-file-<encoded-path>"` is in the viewport (scrolled
+    into view); the matching FileCard is expanded (`defaultOpen` applied).
+  - Click "Generate Brief" on a PR with no `pr_intent` row: the global toast fires
+    (MutationCache unconditional — this is expected and accepted) AND the inline
+    hint-state renders with text referencing intent computation.
+  - Regenerate button: shows loading indicator; on mock POST resolve, the brief
+    content updates without a page reload.
 
 - **Depends-on**: T1
 
 - **Red flags**:
-  - `useSearchParams()` inside a `"use client"` component that is embedded in an existing
-    page requires the page to be wrapped in `<Suspense>` — the PR detail page already
-    has `<Suspense>` at the root (`PRDetailPage` in `page.tsx`), so this is covered.
-    Do NOT add another `<Suspense>` wrapper.
-  - `useParams<{ repoId: string; number: string }>()` resolves the Next.js route segment
-    params. The URL bracket notation `[number]` maps to `number` as the key.
-  - The 422 hint state must NOT re-throw or trigger the global toast. The global mutation
-    error toast fires on `0` and `5xx` only per `providers/index.tsx` — a `422` is a
-    known intent-required case handled inline. Confirm in `providers/index.tsx` that 422
-    errors are indeed silent before relying on this.
+  - **DiffTab `useSearchParams` + Suspense**: `DiffTab` is rendered only inside
+    `PRDetailPageInner`, which is wrapped in `<Suspense>` in `page.tsx` — no
+    additional wrapper needed. Do NOT add another `<Suspense>`.
+  - **`DiffViewer` key change**: change `key={i}` to `key={f.path || i}` to ensure
+    stable DOM identity for the `id`-based scroll target.
+  - **`defaultOpen` semantics**: pass `defaultOpen={f.path === targetFile || undefined}` —
+    `undefined` (not `false`) preserves the existing `AUTO_EXPAND_MAX_LINES` auto-rule
+    for non-target files. Passing `false` would collapse all non-target files.
+  - **Global toast on 422**: `MutationCache.onError` in `providers/index.tsx` fires
+    `notify.error` for ALL mutation errors unconditionally (no `4xx` exception for
+    mutations — only queries suppress below 500). The 422 WILL toast globally AND
+    the card renders an inline hint. This is the only available pattern without
+    modifying `providers.tsx`. Do not attempt to suppress the toast.
+  - **`generate.error.details` typing**: `ApiError.details` is `unknown`; cast with
+    `(generate.error.details as { code?: string } | undefined)?.code` to safely read
+    the `intent_required` discriminator.
   - Never hardcode English strings in JSX — all user-facing text via `useTranslations("brief")`.
-  - i18n namespaces are auto-discovered from filenames — no registry to update; just
-    create `messages/en/brief.json`.
-  - `PrBriefCard` must NOT import `OverviewTab` (direction: OverviewTab imports PrBriefCard,
-    not the other way around).
-  - `useGenerateBrief.onSuccess` writes to `["brief", prId]` cache key — ensure the key
-    matches `useBrief`'s `queryKey` exactly.
-  - Do NOT add `no border shorthand/longhand mixing` in `styles.ts` — use consistent
-    `border: '1px solid …'` across all `borderTop`/`borderBottom` style properties to
-    avoid Stylex/React DOM warnings (the INSIGHTS lesson about border shorthand/longhand).
-  - The `PrBriefCard` is rendered inside `OverviewTab` which is itself a `"use client"`
-    component. No `"use client"` directive needed on `PrBriefCard.tsx` — it inherits the
-    boundary. BUT because it uses `useRouter`, `useSearchParams`, and `useParams`, it
-    must either be `"use client"` itself OR be wrapped. Since it uses client hooks, add
-    `"use client"` at the top of `PrBriefCard.tsx`.
+  - i18n namespaces are auto-discovered from filenames — no registry to update.
+  - Do NOT mix border shorthand/longhand in `styles.ts` — use consistent
+    `border: '1px solid …'` to avoid Stylex/React DOM warnings.
+  - `PrBriefCard` must NOT import `OverviewTab` (direction: OverviewTab imports PrBriefCard).
+  - `useGenerateBrief.onSuccess` writes to `["brief", prId]` — the key must match
+    `useBrief`'s `queryKey` exactly.
+  - `"use client"` at the top of `PrBriefCard.tsx` is required because it uses
+    `useRouter`, `useSearchParams`, and `useParams`.
 
 ---
 
@@ -644,47 +851,51 @@ land in the run's manual checklist after each wave commit.
 - **R1** → `server-it` (`*.it.test.ts`): seed a `pr_brief` row with known JSON; call
   `GET /pulls/:id/brief`; assert HTTP 200 and body matches seeded data; assert mock LLM
   adapter received 0 calls. Also: seed no row; assert `{ brief: null }` with HTTP 200.
-  (AC-1, AC-2)
+  Malformed-jsonb case: insert a row with `json = '"not-a-brief"'`; assert GET returns
+  `{ brief: null }` with HTTP 200 (the `safeParse` path). (AC-1, AC-2)
 
 - **R2** → `server-it`: seed PR with no `pr_intent` row; call `POST /pulls/:id/brief`;
-  assert HTTP 422 and `error.code === "intent_required"`; assert mock LLM 0 calls.
-  (AC-3)
+  assert HTTP 422; assert response body
+  `{ error: { code: "validation_error", details: { code: "intent_required" } } }`;
+  assert mock LLM 0 calls. (AC-3)
 
 - **R3** → hermetic unit (`*.test.ts`): call `assembleBriefMessages` with mock inputs
-  for all five sources (intent, blast summary, smart-diff stats, linked issue, one
-  context doc); assert each source appears in the output; assert output contains no
-  `+`-prefixed or `-`-prefixed diff line content. (AC-4, AC-8)
+  for all five sources; assert each source appears in the output including
+  `<untrusted source="linked-issue">` (title + body) and `<untrusted source="smart-diff">`
+  (file paths); assert output contains no `+`-prefixed or `-`-prefixed diff line content.
+  (AC-4, AC-8)
 
 - **R4** → hermetic unit: inject a call-counting mock `LLMProvider`; call
-  `generateBrief` once on a valid PR fixture; assert the mock received exactly 1
-  `completeStructured` invocation. (AC-5)
+  `generateBrief` once; assert the mock received exactly 1 `completeStructured`
+  invocation. (AC-5)
 
-- **R5** → `server-it`: mock LLM returning `risks: [{kind: 'perf', title: 'T', …, file_refs: ['a.ts']}, {kind: 'sec', title: 'T', …, file_refs: ['outside.ts']}]` and
-  `review_focus: [{file: 'a.ts', …}, {file: 'outside.ts', …}]`; PR file set = `{a.ts}`
-  only; assert persisted `brief.risks` has 1 entry with `file_refs: ['a.ts']`; assert
-  `review_focus` has 1 entry; assert POST response `dropped_items === 2`. (AC-6, AC-7)
+- **R5** → `server-it`: mock LLM returns
+  `risks: [{…, file_refs: ['src/a.ts']}, {…, file_refs: ['./outside.ts']}]`
+  and `review_focus: [{file: 'src/a.ts', …}, {file: 'outside.ts', …}]`;
+  PR file set = `{'src/a.ts'}` only; assert persisted `brief.risks` has 1 entry
+  with `file_refs: ['src/a.ts']`; assert `review_focus` has 1 entry with
+  `file: 'src/a.ts'`; assert POST response `dropped_items === 2`. (AC-6, AC-7)
 
-- **R6** → `server-it`: use a mock LLM that echoes `tokensIn` equal to the byte length
-  of the assembled user message divided by 4 (approximation); assert POST response
-  `tokens_in ≤ 8000` for a representative PR fixture. (AC-9)
+- **R6** → `server-it`: mock LLM echoes `tokensIn` proportional to prompt byte length;
+  assert POST response `tokens_in ≤ 8000` for a reference PR fixture. (AC-9)
 
-- **R7** → `server-it`: seed 2 agents with 3 context doc paths (one shared path, one
-  agent-2-only, one shared zero-byte path); mock clone dir; trigger `generateBrief`;
-  assert the shared non-empty path was read once; assert the zero-byte path absent from
-  mock LLM call messages. (AC-10)
+- **R7** → `server-it`: seed 2 agents with 3 paths (1 shared non-empty, 1 zero-byte
+  shared); mock clone dir; trigger `generateBrief`; assert the shared non-empty path
+  read exactly once; assert zero-byte path absent from LLM call messages. (AC-10)
 
-- **R8** → hermetic unit: call `assembleBriefMessages` with non-empty values for all
-  five input types; assert every third-party string is enclosed in `<untrusted …>` /
-  `</untrusted>` delimiters; assert system message contains the `INJECTION_GUARD`
-  sentinel string (import it from `@devdigest/reviewer-core` in the test). (AC-11)
+- **R8** → hermetic unit: call `assembleBriefMessages` with all five inputs populated;
+  assert system message contains `INJECTION_GUARD` sentinel; assert each of the five
+  untrusted surfaces (`intent`, `blast-summary`, `smart-diff`, `linked-issue`,
+  `context-doc-0`) appears wrapped in `<untrusted …>` / `</untrusted>`. (AC-11)
 
-- **R9** → `e2e`: three flow specs — (1) PR with no `pr_brief` row: navigate to Overview
-  tab; assert `PrBriefCard` empty-state element visible; assert no `what`/`why`/`risk_level`
-  elements. (2) PR with seeded `pr_brief` row: navigate to Overview tab; assert
-  `PrBriefCard` is the first rendered child before the grid; assert `risk_level` badge,
-  one `risks` entry, one `review_focus` entry, usage line all visible. (3) PR with no
-  `pr_intent` row: click Generate Brief; assert 422 hint text visible with reference to
-  intent computation. (AC-12, AC-13, AC-14, AC-15)
+- **R9** → `e2e`: three flows — (1) PR with no `pr_brief` row: navigate to Overview
+  tab; assert `PrBriefCard` empty-state visible; assert no `what`/`why`/`risk_level`
+  badge in DOM. (2) PR with seeded `pr_brief` row: assert card is first child before
+  the grid container; assert badge, risks, review_focus, usage line visible; click a
+  `review_focus` file link; assert tab changes to diff and the target `FileCard`
+  element is in viewport. (3) PR with no `pr_intent` row: click Generate Brief;
+  assert inline hint text with intent reference visible (global toast also fires —
+  both are part of the expected outcome). (AC-12, AC-13, AC-14, AC-15)
 
 ---
 
@@ -700,28 +911,28 @@ Wave 2 (parallel):  T2 (needs T1) || T3 (needs T1)
 T2 and T3 are fully parallel in Wave 2 — no shared files.
 
 **Critical path:** T1 → T2 (server) or T1 → T3 (client). Both converge at Wave 2.
-The server (T2) and client (T3) are independently reviewable after their wave.
 
 **Commit cadence (one commit per wave):**
 - Wave 1 commit: shared contracts (`BriefRecord`, `ReviewFocusItem`; remove `PrBrief`)
-- Wave 2 commit: server module + client hooks + card + OverviewTab mount
+- Wave 2 commit: server module + `reviews/intent.ts` export + client hooks + card + DiffViewer + OverviewTab mount
 
 **No human confirmation steps required:**
-- The `pr_brief` table already exists — `pnpm db:generate` and `pnpm db:migrate` are
-  NOT needed. This is explicitly a non-migration feature.
-- No new nav entries or VALID_TABS changes needed — the card mounts in an existing tab.
+- The `pr_brief` table already exists — no migration.
+- No new nav entries or VALID_TABS changes — card mounts in an existing tab.
 
 **Risks and mitigations:**
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| `BriefLLMSchema` strict mode rejects a Zod constraint | `completeStructured` throws on every attempt | No `.min(1)` on any string field in `BriefLLMSchema`; only use plain `z.string()`, `z.enum()`, `z.number().int().nullable()` |
-| `composeSmartDiff` depends on findings from the latest review — if no review exists yet, findings are `[]` | Smart-diff file list may be empty; this is valid (brief proceeds with only blast files in prFileSet) | The spec allows this; grounding gate handles empty file sets correctly |
-| `BlastService.blastForPull` fails when repo-intel is disabled or degraded | Brief generation proceeds with empty `changed_symbols`; only smart-diff file paths in prFileSet | `BlastRadius.status` may be `"failed"`; brief service checks `blast.status` and logs a warning; grounding gate still runs on smart-diff paths |
-| `tokensIn` accumulates across `completeStructured` retries (up to 2 attempts) | POST response `tokens_in` may exceed the 8K target when the model fails schema validation on attempt 1 | `maxRetries: 1` limits the blast to 2 × prompt tokens; per-source character caps (D7) keep the first-attempt prompt well under 4K tokens, giving headroom even with a retry |
-| `wrapUntrusted` delimiter injection in issue body or context doc | INJECTION_GUARD neutralises it | Same mechanism as SPEC-01 and L05 run-executor — already tested there; covered by R8 hermetic test |
-| Concurrent `POST /pulls/:id/brief` — two callers hit simultaneously | Both make an LLM call; last UPSERT wins | Spec explicitly accepts this (edge case section); both use the same inputs and produce semantically equivalent briefs; no data corruption |
-| `PrBrief` removal breaks a downstream consumer not found in grep | TypeScript build errors in Wave 1 verification | `pnpm tsc --noEmit` on both server and client is the T1 acceptance gate; will fail loudly if `PrBrief` is consumed anywhere |
+| `BriefLLMSchema` strict mode rejects a Zod constraint | `completeStructured` throws on every attempt | No `.min(1)` on any string field in `BriefLLMSchema` |
+| Path mismatch between blast/smart-diff file paths and LLM-returned refs | Valid risks silently dropped | `normalizePath()` applied to both sides before grounding comparison (Extra-CRITICAL) |
+| `composeSmartDiff` returns empty files when no review exists yet | Smart-diff file list may be empty; prFileSet smaller | Brief proceeds with only blast files; grounding gate handles empty sets correctly |
+| `BlastService.blastForPull` returns `status: "failed"` | Empty `changed_symbols`; only smart-diff paths in prFileSet | Spec explicitly allows this; brief continues with whatever files are available |
+| `tokensIn` accumulates across retries (up to 2 attempts with `maxRetries: 1`) | POST response `tokens_in` can exceed 8K if first attempt fails schema validation | Character caps (D7) keep first-attempt prompt well under 4K, giving headroom |
+| Malformed `pr_brief.json` in DB | `getBrief` throws if using `parse` | `safeParse` + warn + return null — GET always responds HTTP 200 (F2) |
+| MutationCache toasts ALL errors including 422 | 422 double-signals (toast + inline hint) | Accepted — cannot suppress without modifying providers.tsx; both signals documented in T3 |
+| `PrBrief` removal breaks a downstream consumer not found in grep | TypeScript build errors | T1 acceptance gate: `pnpm tsc --noEmit` on both packages fails loudly |
+| Concurrent `POST /pulls/:id/brief` | Both make an LLM call; last UPSERT wins | Spec explicitly accepts this; no data corruption |
 
 ---
 
@@ -729,18 +940,41 @@ The server (T2) and client (T3) are independently reviewable after their wave.
 
 - **T1**: `cd /Users/admin/dev-digest/server && pnpm tsc --noEmit` — zero errors;
   `cd /Users/admin/dev-digest/client && pnpm tsc --noEmit` — zero errors.
-  Spot check: `grep -r "PrBrief" /Users/admin/dev-digest/server/src /Users/admin/dev-digest/client/src` returns only comments (no type usages).
+  `grep -r "PrBrief" /Users/admin/dev-digest/server/src /Users/admin/dev-digest/client/src`
+  returns only comments, no type usages.
 
 - **T2**: `cd /Users/admin/dev-digest/server && pnpm tsc --noEmit` — zero errors;
   `cd /Users/admin/dev-digest/server && pnpm exec vitest run src/modules/brief`
-  (hermetic unit tests for prompt assembly, grounding gate, single-call invariant).
-  Integration smoke: with the server running and Postgres seeded —
-  `curl -s -H "Cookie: <ws-cookie>" http://localhost:3001/pulls/<prId>/brief` returns
-  `{ "brief": null }` (HTTP 200); `curl -s -X POST … /pulls/<no-intent-prId>/brief`
-  returns HTTP 422 with `code: "intent_required"`.
+  (hermetic unit tests for prompt assembly, path normalization, grounding gate,
+  single-call invariant).
+  Integration smoke: `curl -s … /pulls/<prId>/brief` returns `{ "brief": null }` (HTTP 200);
+  `curl -s -X POST … /pulls/<no-intent-prId>/brief` returns HTTP 422 with
+  `{ "error": { "code": "validation_error", "details": { "code": "intent_required" } } }`.
 
 - **T3**: `cd /Users/admin/dev-digest/client && pnpm tsc --noEmit` — zero errors;
-  `cd /Users/admin/dev-digest/client && pnpm exec vitest run src/app/repos` (existing
-  component unit tests continue to pass). Manual browser check: PR Overview tab renders
-  `PrBriefCard` above the IntentCard+BlastRadiusCard grid; empty state and Generate
-  button visible for a PR with no seeded brief.
+  `cd /Users/admin/dev-digest/client && pnpm exec vitest run src/app/repos` — existing
+  tests continue to pass. Manual browser check: PR Overview tab renders `PrBriefCard`
+  above the grid; file link click navigates to diff tab and the target `FileCard`
+  scrolls into view.
+
+---
+
+## Cross-model review dispositions (gpt-5-mini, 2026-07-03)
+
+Staff-engineer cross-model review via OpenRouter (model: openai/gpt-5-mini). Verdict: REQUEST CHANGES. 12 findings + 1 extra from first pass.
+
+| ID | Severity | Disposition | Detail |
+|---|---|---|---|
+| F1 | CRITICAL | **Accepted** | File links now render as real `<a href="?tab=diff&file=<path>">` with `onClick` for SPA nav and `aria-label`. `DiffViewer.tsx` wraps each `FileCard` in a div with a stable `id="diff-file-<encoded-path>"`. `DiffTab.tsx` reads the `file` URL param via `useSearchParams`, passes `targetFile` to `DiffViewer`, and adds a `useEffect` scroll with 100 ms delay. T3 now owns `DiffTab/DiffTab.tsx` and `components/diff-viewer/DiffViewer/DiffViewer.tsx`. |
+| Extra-CRITICAL | CRITICAL | **Accepted** | `normalizePath(p: string): string` helper added to `helpers.ts` (strip `./`, convert `\` to `/`, trim). Called on every path before insertion into `prFileSet` AND on every LLM-returned `file_refs`/`review_focus.file` value before the grounding-set comparison. Prevented `./src/foo.ts` ≠ `src/foo.ts` silent drops. |
+| F2 | CRITICAL | **Accepted** | `getBrief` uses `BriefRecord.safeParse(row.json)` instead of `.parse`. On failure, logs warn with `prId` and returns `null`. GET always responds HTTP 200. Malformed-jsonb test case added to R1 test intent. |
+| F3 | WARNING | **Accepted** | All five untrusted surfaces explicitly enumerated in `assembleBriefMessages`: `intent`, `blast-summary`, `smart-diff` (contributor-controlled file paths), `linked-issue` (title + body jointly capped), `context-doc-N` per doc. R8 test intent updated to assert all five `<untrusted …>` wrappers. |
+| F4 | WARNING | **Rejected** | D3 (internal `new BlastService(container)` + `new ReviewService(container)`) follows the repo convention per `server/AGENTS.md`: services take `Container` only; mocks are injected via `ContainerOverrides` at the container level. No import cycle (brief → blast/reviews, never the reverse). Internal peer-service instantiation is both testable and consistent with existing patterns. |
+| F5 | WARNING | **Partially accepted** | `resolveLinkedIssue` is exported from `modules/reviews/intent.ts` (one-line change) and imported in `modules/brief/helpers.ts`. Cross-module helper import follows the `RepoRepository` cross-module precedent established in `onboarding-tours/service.ts`. T2 owned paths updated to include `reviews/intent.ts`. D5 wording updated from "inline" to "export + import". |
+| F6 | WARNING | **Accepted** | Context-doc union now explicitly ordered: agents by `agentsRepo.list()` insertion order (sort by `agent.id` UUID for tiebreak), docs within each agent by `order ASC` (already guaranteed by repository query). Dedup key normalized via `normalizePath`. Stable prompts across runs. R7 test intent updated. |
+| F7 | WARNING | **Rejected** | CI byte-identity guard for dual-vendored contracts is a repo-wide tooling concern outside SPEC-03 scope. The `pr-self-review` skill's shared-contracts bucket already diffs the vendor copies at PR-gate time. Recorded here as future work. |
+| F8 | WARNING | **Accepted** | `generateBrief` step 2 now uses `new ValidationError('…', { code: 'intent_required' })` (verified against `platform/errors.ts`: constructor is `ValidationError(message?, details?)` → `super('validation_error', message, 422, details)`). Envelope: `{ error: { code: 'validation_error', details: { code: 'intent_required' } } }`. R2 acceptance criteria updated. T2 error-mapping section updated. 422 curl assertion updated. |
+| F9 | WARNING | **Rejected** | `PrBrief` compat alias is unnecessary. `pnpm tsc --noEmit` gate plus `grep` spot-check confirm zero runtime or compile-time consumers. Nothing in this repo is published as an npm package (root AGENTS.md: "Nothing is published"). Removal stands. |
+| F10 | NOTE | **Accepted — merged into F1** | Real `<a href>` rendering with `onClick` SPA nav is fully addressed by F1. No separate change. |
+| F11 | WARNING | **Accepted** | Verified: `MutationCache.onError` in `providers/index.tsx` fires `notify.error(errorMessage(err))` unconditionally for ALL mutation errors. No per-mutation suppression exists. The 422 both toasts globally AND the card shows the inline hint. Documented as the accepted double-signal pattern in T3 task body and red flags. Acceptance criteria updated to assert both signals. |
+| F12 | NOTE | **Rejected** | Cross-task PR sequencing is not applicable: tasks run in ONE shared working tree; the orchestrator commits per wave after both T2 and T3 complete; path disjointness (not PR ordering) prevents collisions. |
