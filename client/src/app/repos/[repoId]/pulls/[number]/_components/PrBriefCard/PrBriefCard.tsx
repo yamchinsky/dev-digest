@@ -12,6 +12,11 @@ import { useBrief, useGenerateBrief } from "@/lib/hooks/brief";
 import { ApiError } from "@/services/api";
 import { s } from "./styles";
 
+/** SPA-nav guard: let modifier/aux clicks (new tab, window) reach the browser. */
+function isPlainLeftClick(e: React.MouseEvent): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
+
 export function PrBriefCard({ prId }: { prId: string }) {
   const params = useParams<{ repoId: string; number: string }>();
   const searchParams = useSearchParams();
@@ -124,6 +129,7 @@ export function PrBriefCard({ prId }: { prId: string }) {
                         style={s.fileLink}
                         aria-label={t("a11y.fileLink", { file })}
                         onClick={(e) => {
+                          if (!isPlainLeftClick(e)) return; // native new-tab behavior
                           e.preventDefault();
                           router.push(diffUrl(file));
                         }}
@@ -151,6 +157,7 @@ export function PrBriefCard({ prId }: { prId: string }) {
                 style={s.fileLink}
                 aria-label={t("a11y.fileLink", { file: item.file })}
                 onClick={(e) => {
+                  if (!isPlainLeftClick(e)) return; // native new-tab behavior
                   e.preventDefault();
                   router.push(diffUrl(item.file));
                 }}
