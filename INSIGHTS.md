@@ -27,6 +27,8 @@ _2026-07-02_ · `.claude/settings.json` (PreToolUse `"if": "Bash(gh pr create*)"
 
 The PreToolUse matcher `Bash(gh pr create*)` anchors at the start of the command string, so any prefix — `cd /path && gh pr create`, env assignment, subshell — slips past the gate and the PR opens unreviewed (bit us on PR #20). Same fails-open family as the routing-bucket entry below. Fix direction: change the matcher to a substring/regex form that catches `gh pr create` anywhere in the command (or have the hook script itself grep the full command), and until then run pr-self-review manually when opening PRs from scripts/compound commands.
 
+> Updated 2026-07-03: the hook ALSO fails **closed** on clean commands — it blocks every `gh pr create` unconditionally (no verdict recognition; it never reads `.claude/cache/pr-self-review/<hash>.json`), so its own "re-issue the original command after PASS" instruction dead-loops. The designed exit is the audited `PR_SELF_REVIEW_BYPASS=1` env — but the Claude Code auto-mode classifier denies the MODEL setting it (correctly: guard bypasses are a human decision). Practical completion paths after a PASS verdict: the user runs `gh pr create …` themselves (own terminal, or `!`-prefix in the session), or the user explicitly approves the bypass command. Real fix: teach the hook to compute the current diff hash and exit 0 when a fresh cached verdict is PASS — then "re-issue" genuinely works.
+
 ### pr-self-review fails open: a diff file matching no routing.md bucket is never reviewed
 _2026-07-02_ · `.claude/skills/pr-self-review/SKILL.md:64-67`, `.claude/skills/pr-self-review/routing.md`
 
