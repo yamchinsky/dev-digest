@@ -42,7 +42,7 @@ export class BriefRepository {
     if (!row) return null;
     const parsed = BriefRecord.safeParse(row.json);
     if (!parsed.success) {
-      logger?.warn(`pr_brief row for prId=${prId} failed schema validation — returning null`);
+      (logger ?? console).warn(`pr_brief row for prId=${prId} failed schema validation — returning null`);
       return null;
     }
     return parsed.data;

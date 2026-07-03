@@ -121,7 +121,7 @@ export class BriefService {
     // 11. Resolve LLM adapter. ConfigError passes through; other failures → ExternalServiceError.
     let llm;
     try {
-      llm = await this.container.llm(provider as 'openai' | 'anthropic' | 'openrouter');
+      llm = await this.container.llm(provider);
     } catch (err) {
       if (err instanceof ConfigError) throw err;
       throw new ExternalServiceError(

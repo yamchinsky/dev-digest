@@ -3,7 +3,7 @@ import { Severity } from './findings.js';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
- * Smart Diff. Composed into PrBrief.
+ * Smart Diff. Brief persistence uses BriefRecord (below).
  */
 
 // ---- Intent ----
