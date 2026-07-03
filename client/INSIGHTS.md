@@ -76,6 +76,11 @@ When a clickable wrapper `<button aria-label="…">` contains only `<SeverityBad
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages
 _2026-06-18_ · see repo-root `INSIGHTS.md` → Recurring Errors & Fixes (cross-module; concrete client bite was `RunTraceDrawer.test.tsx:10`)
 
+### The diff tab has TWO renderers — a per-file affordance added to only one silently no-ops on the other
+_2026-07-03_ · `pulls/[number]/_components/DiffTab/DiffTab.tsx` (branch at `smartDiff ? <SmartDiffViewer> : <DiffViewer>`)
+
+`DiffTab` renders `SmartDiffViewer` (the PRIMARY path — grouped smart order + flat original order inside it) and falls back to the flat `DiffViewer` only while smart-diff loads or errors. Any per-file affordance (stable scroll ids, `defaultOpen` targets, badges, summaries) must be implemented in BOTH components — and in BOTH order modes of SmartDiffViewer. Bit us in SPEC-03: the deep-link `?tab=diff&file=` scroll wrappers were first added to `DiffViewer` only, so clicks from PrBriefCard no-op'd on the primary path (`getElementById` → null, optional chaining swallowed it — no error, no warning). Same fails-open family as the tab/nav two-registry entries below.
+
 ### Editor tabs have TWO registries — the render list AND a page-level `VALID_TABS` URL whitelist; missing the second makes the tab a silent no-op
 _2026-07-02_ · `src/app/agents/[id]/page.tsx:15` vs `_components/AgentEditor/constants.ts`, same pattern in `skills/_components/SkillsLab/SkillsLab.tsx:44`
 
