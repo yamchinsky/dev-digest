@@ -7,7 +7,8 @@ import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
-import { deriveIntent, resolveLinkedIssue, type IntentDerivationResult } from './intent.js';
+import { deriveIntent, type IntentDerivationResult } from './intent.js';
+import { resolveLinkedIssue } from '../../platform/github-utils.js';
 import { loadDiff } from './diff-loader.js';
 import { composeSmartDiff } from './smart-diff.js';
 

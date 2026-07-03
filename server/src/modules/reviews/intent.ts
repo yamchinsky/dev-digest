@@ -7,15 +7,10 @@ import { resolveFeatureModel } from '../settings/feature-models.js';
 import type { PullRow } from './repository.js';
 import type * as schema from '../../db/schema.js';
 
-/**
- * Linked-issue data accepted by `deriveIntent`. The caller may already have
- * this (e.g. fetched from GitHub at PR sync time); passing it in avoids an
- * extra network round-trip in the hot path.
- */
-export interface LinkedIssueMeta {
-  title: string;
-  body?: string | null;
-}
+// LinkedIssueMeta and resolveLinkedIssue moved to platform/github-utils.ts
+// (SPEC-03 arch review — infrastructure-shared utility, not reviews-owned).
+import type { LinkedIssueMeta } from '../../platform/github-utils.js';
+export type { LinkedIssueMeta };
 
 /**
  * Result returned by `deriveIntent` — the structured Intent plus the
@@ -140,32 +135,3 @@ export async function deriveIntent(
   };
 }
 
-/**
- * Issue-reference heuristic, kept in sync with the octokit import-time
- * resolver (`adapters/github/octokit.ts`): `Closes/Fixes/Resolves #N`, with
- * the keyword optional so a bare `#N` also matches.
- */
-const LINKED_ISSUE_RE = /(?:closes|fixes|resolves)?\s*#(\d+)/i;
-
-/**
- * Best-effort resolve of a PR's linked issue from its body, via the GitHub
- * port. Returns the issue title + body when a `#N` reference resolves, or
- * `null` when there is no reference, no GitHub token, or the API call fails.
- * NEVER throws — intent derivation stays best-effort even when GitHub is
- * unavailable, so the caller simply proceeds without the linked-issue context.
- */
-export async function resolveLinkedIssue(
-  container: Container,
-  repoRow: typeof schema.repos.$inferSelect,
-  body: string | null | undefined,
-): Promise<LinkedIssueMeta | null> {
-  const match = body?.match(LINKED_ISSUE_RE);
-  if (!match?.[1]) return null;
-  try {
-    const github = await container.github();
-    const issue = await github.getIssue({ owner: repoRow.owner, name: repoRow.name }, Number(match[1]));
-    return { title: issue.title, body: issue.body };
-  } catch {
-    return null;
-  }
-}

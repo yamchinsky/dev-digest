@@ -10,8 +10,7 @@ import {
   ConfigError,
 } from '../../platform/errors.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
-import { BlastService } from '../blast/service.js';
-import { ReviewService } from '../reviews/service.js';
+import { resolveLinkedIssue } from '../../platform/github-utils.js';
 import { RepoRepository } from '../repos/repository.js';
 import { BriefRepository } from './repository.js';
 import {
@@ -19,7 +18,6 @@ import {
   assembleBriefMessages,
   groundBrief,
   normalizePath,
-  resolveLinkedIssue,
 } from './helpers.js';
 
 export class BriefService {
@@ -68,10 +66,12 @@ export class BriefService {
     const repo = await this.repoRepo.getById(workspaceId, pull.repoId);
     if (!repo) throw new NotFoundError('Repository not found');
 
-    // 4. Gather inputs in parallel.
+    // 4. Gather inputs in parallel. Peer-module services are reached through
+    // the Container's lazy getters (arch review: a service must not import a
+    // peer module's service class directly).
     const [blast, smartDiff, linkedIssue] = await Promise.all([
-      new BlastService(this.container).blastForPull(workspaceId, prId),
-      new ReviewService(this.container).smartDiffForPull(workspaceId, prId),
+      this.container.blastService.blastForPull(workspaceId, prId),
+      this.container.reviewService.smartDiffForPull(workspaceId, prId),
       resolveLinkedIssue(this.container, repo, pull.body),
     ]);
 
