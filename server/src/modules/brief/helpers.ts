@@ -3,12 +3,6 @@ import { INJECTION_GUARD, wrapUntrusted } from '@devdigest/reviewer-core';
 import type { Risk, ReviewFocusItem } from '@devdigest/shared';
 
 /**
- * Re-export resolveLinkedIssue so service.ts only imports from brief/* (D5).
- * The function already lives in reviews/intent.ts and is exported there.
- */
-export { resolveLinkedIssue } from '../reviews/intent.js';
-
-/**
  * Canonicalize a file path to repo-relative POSIX form before any
  * grounding-set membership check. Applied to both the prFileSet entries and
  * the LLM-returned file_refs / review_focus.file values (Extra-CRITICAL).

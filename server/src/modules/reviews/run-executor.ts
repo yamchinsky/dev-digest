@@ -12,7 +12,8 @@ import { RepoRepository } from '../repos/repository.js';
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
-import { deriveIntent, resolveLinkedIssue } from './intent.js';
+import { deriveIntent } from './intent.js';
+import { resolveLinkedIssue } from '../../platform/github-utils.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {

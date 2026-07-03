@@ -27,6 +27,8 @@ import { AgentsRepository } from '../modules/agents/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
+import { BlastService } from '../modules/blast/service.js';
+import { ReviewService } from '../modules/reviews/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 
@@ -73,6 +75,8 @@ export class Container {
   private _agentsRepo?: AgentsRepository;
   private _reviewRepo?: ReviewRepository;
   private _repoIntel?: RepoIntel;
+  private _blastService?: BlastService;
+  private _reviewService?: ReviewService;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
@@ -115,6 +119,20 @@ export class Container {
     if (this.overrides.repoIntel) return this.overrides.repoIntel;
     this._repoIntel ??= new RepoIntelService(this);
     return this._repoIntel;
+  }
+
+  /**
+   * Lazy peer-service accessors. A module's service must never import another
+   * module's service class directly (onion-architecture rule; SPEC-03 arch
+   * review) — cross-feature composition goes through the container, mirroring
+   * the `repoIntel` facade pattern above.
+   */
+  get blastService(): BlastService {
+    return (this._blastService ??= new BlastService(this));
+  }
+
+  get reviewService(): ReviewService {
+    return (this._reviewService ??= new ReviewService(this));
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */
