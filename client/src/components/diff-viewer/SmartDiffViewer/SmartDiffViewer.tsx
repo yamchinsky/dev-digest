@@ -114,6 +114,7 @@ function SmartDiffFileRow({
   prFile,
   commenting,
   onOpenFinding,
+  isTarget,
   t,
 }: {
   smartFile: { path: string; finding_lines: number[]; findings: SmartDiffFinding[] };
@@ -121,12 +122,14 @@ function SmartDiffFileRow({
   commenting?: DiffCommentApi;
   /** Navigate to the Findings tab and open the clicked finding's card. */
   onOpenFinding?: (findingId: string) => void;
+  /** Deep-link target (?tab=diff&file=...) — starts open so the scroll lands on content. */
+  isTarget?: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
   const hasFindings = smartFile.findings.length > 0;
 
-  // Files with findings start open; others start collapsed.
-  const [open, setOpen] = React.useState(hasFindings);
+  // Files with findings (or the deep-link target) start open; others collapsed.
+  const [open, setOpen] = React.useState(hasFindings || !!isTarget);
 
   // new-side line number → findings on that line, for in-line clickable badges.
   const findingsByLine = React.useMemo(() => lineMapFor(smartFile.findings), [smartFile.findings]);
@@ -165,9 +168,11 @@ export interface SmartDiffViewerProps {
   commenting?: DiffCommentApi;
   /** Clicking a severity badge navigates to the Findings tab and opens this id. */
   onOpenFinding?: (findingId: string) => void;
+  /** Deep-link target (?tab=diff&file=...): stable-id wrappers enable DiffTab's scroll. */
+  targetFile?: string;
 }
 
-export function SmartDiffViewer({ smartDiff, files, commenting, onOpenFinding }: SmartDiffViewerProps) {
+export function SmartDiffViewer({ smartDiff, files, commenting, onOpenFinding, targetFile }: SmartDiffViewerProps) {
   const t = useTranslations("smartDiff");
   const [smartOrder, setSmartOrder] = React.useState(true);
 
@@ -264,14 +269,16 @@ export function SmartDiffViewer({ smartDiff, files, commenting, onOpenFinding }:
                     const prFile = fileMap.get(sf.path);
                     if (!prFile) return null;
                     return (
-                      <SmartDiffFileRow
-                        key={sf.path}
-                        smartFile={sf}
-                        prFile={prFile}
-                        commenting={commenting}
-                        onOpenFinding={onOpenFinding}
-                        t={t}
-                      />
+                      <div key={sf.path} id={`diff-file-${encodeURIComponent(sf.path)}`}>
+                        <SmartDiffFileRow
+                          smartFile={sf}
+                          prFile={prFile}
+                          commenting={commenting}
+                          onOpenFinding={onOpenFinding}
+                          isTarget={sf.path === targetFile}
+                          t={t}
+                        />
+                      </div>
                     );
                   })}
                 </div>
@@ -285,13 +292,15 @@ export function SmartDiffViewer({ smartDiff, files, commenting, onOpenFinding }:
       {!smartOrder && (
         <div style={sv.fileList}>
           {allFilesSorted.map(({ sf, prFile }) => (
-            <FileCard
-              key={sf.path}
-              file={prFile}
-              commenting={commenting}
-              findingsByLine={lineMapFor(sf.findings)}
-              onFindingClick={onOpenFinding}
-            />
+            <div key={sf.path} id={`diff-file-${encodeURIComponent(sf.path)}`}>
+              <FileCard
+                file={prFile}
+                commenting={commenting}
+                findingsByLine={lineMapFor(sf.findings)}
+                onFindingClick={onOpenFinding}
+                defaultOpen={sf.path === targetFile || undefined}
+              />
+            </div>
           ))}
         </div>
       )}

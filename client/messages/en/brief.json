@@ -1,19 +1,28 @@
 {
-  "block": {
-    "intent": "Intent",
-    "blast": "Blast radius",
-    "risks": "Risks",
-    "history": "PR history"
+  "title": "PR Why + Risk Brief",
+  "empty": {
+    "title": "No brief yet",
+    "body": "Generate a structured summary of what this PR does, why, and where the risks are."
   },
-  "noRisks": "No notable risks flagged.",
-  "noHistory": "No prior PRs overlap these files.",
-  "overlap": "{count} overlap",
-  "unavailable": "Brief not available yet.",
-  "unavailableHint": "Run a review or open the PR to compute it.",
-  "why": {
-    "title": "git-why",
-    "blame": "blame",
-    "noHistory": "No history available for this line.",
-    "noCommits": "No commits found for this line."
+  "intentRequired": "Intent not yet computed. Use the Intent card below to compute intent, then click Generate Brief.",
+  "riskLevel": {
+    "low": "Low risk",
+    "medium": "Medium risk",
+    "high": "High risk"
+  },
+  "sections": {
+    "what": "What",
+    "why": "Why",
+    "risks": "Risks",
+    "reviewFocus": "Review Focus"
+  },
+  "usage": "{tokensIn} → {tokensOut} tokens · {costUsd}",
+  "actions": {
+    "generate": "Generate Brief",
+    "regenerate": "Regenerate"
+  },
+  "a11y": {
+    "riskBadge": "Risk level: {level}",
+    "fileLink": "Go to diff for {file}"
   }
 }
