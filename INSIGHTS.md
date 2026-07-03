@@ -44,7 +44,10 @@ _None yet._
 
 ## Tool & Library Notes
 
-### `DevDigest Design (standalone).html` is a custom base64+gzip bundle — `file://` crashes the runtime
+### Renaming a PR's HEAD branch on GitHub CLOSES the open PR — rename before opening, or accept a new PR number
+_2026-07-03_ · `gh api repos/<owner>/<repo>/branches/<old>/rename` (bit us on PR #22 → #23)
+
+GitHub's branch-rename auto-retarget only applies to PRs that use the renamed branch as **base**; a PR whose **head** is renamed gets closed (its head ref is gone) and cannot be reopened. Bit us on the L06 homework: `feat/pr-brief` → `feat/pr5-hw` closed PR #22 minutes after creation, forcing PR #23 with identical content. The homework naming convention (`feat/prN-hw`) makes late renames likely — so either name the branch `feat/prN-hw` from the start, or finish all renames BEFORE `gh pr create`. Local cleanup after an API rename: `git branch -m old new && git fetch --prune && git branch -u origin/new new`.
 _2026-06-19_ · `~/Desktop/dev-digest-mats/DevDigest Design (standalone).html` (`repo-wide` tooling)
 
 The standalone design artefact is a single 1.7 MB HTML that *looks* static but is a bundler: assets live in `<script type="__bundler/manifest">` (base64, gzip-`compressed: true`), the HTML template lives in `<script type="__bundler/template">` (JSON-encoded string), and the boot script swaps `document.documentElement` with the decoded template. Loading via `file://` makes blob URLs inherit a null origin → the bundler's own `fetch(s.src)` for inline-babel scripts silently drops, and Chrome DevTools loses its target on `replaceWith` (the page just disappears from `list_pages`). Serving from `127.0.0.1` works but exposing `Desktop/` is sandbox-blocked here. **Inspection workflow that works without rendering:** read line 178 → `JSON.parse` → grep for `type="text/babel"\s+src="<uuid>"` → for each UUID, look up the matching manifest entry, `base64.b64decode` then `gzip.decompress` if `compressed: true` → write to `/tmp/dd-design-src/NN_<uuid>.jsx`. The 28 babel scripts are the actual JSX; e.g. `screen_pr_detail.jsx`, `findings.jsx`, `prdetail_runs.jsx`. Faster than fighting the runtime.
@@ -90,6 +93,11 @@ _2026-06-20_ · `.claude/settings.json` (`repo-wide` tooling)
 Claude Code reads `.claude/settings.json` (project) and `~/.claude/settings.json` (user) once at session boot and caches them for the lifetime of the session. Edits to hook commands, permissions, env vars, or model don't propagate to the running session — and `/clear` doesn't reload settings, it only resets conversation context. Symptom: a hook fires with text/behavior that doesn't match what's on disk (e.g. a phantom "Failed with non-blocking status code" from a buggy command you already replaced). Diagnose by comparing the hook payload in the system-reminder to `cat .claude/settings.json`; if they differ, you're on cached config. Fix is a full exit + relaunch of Claude Code.
 
 ## Recurring Errors & Fixes
+
+### A broken line continuation in `gh pr create` still opens the PR — with the wrong body
+_2026-07-03_ · `repo-wide` (git/gh tooling)
+
+A multi-line `gh pr create` missing a `\` continuation does NOT fail loudly: with no `--body*` flag on the first line, gh drops into interactive mode, auto-fills the body from the commit list, and submits — the orphaned `--body-file …` second line then errors as `zsh: command not found: --body-file` (bit us on PR #22). Net result: a live PR with the auto-generated body, easy to miss. Fix: don't close/recreate — `gh pr edit <n> --body-file <file>`. Note `gh pr edit` also bypasses the pr-self-review hook (it gates only `Bash(gh pr create*)`), fine here since review already ran at create time.
 
 ### `gh pr create` from this fork defaults to upstream (`burnjohn`), not `origin` (`yamchinsky`)
 _2026-06-20_ · `repo-wide` (git/gh tooling)
