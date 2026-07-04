@@ -29,15 +29,21 @@ export class BriefService {
     this.repoRepo = new RepoRepository(container.db);
   }
 
-  /** GET — return the persisted brief, or null when none exists (no LLM call). */
+  /** GET — return the persisted brief plus a computed staleness flag (no LLM call). */
   async getBrief(
     workspaceId: string,
     prId: string,
-  ): Promise<{ brief: BriefRecord | null }> {
+  ): Promise<{ brief: BriefRecord | null; stale: boolean }> {
     const pull = await this.repo.getPull(workspaceId, prId);
     if (!pull) throw new NotFoundError('Pull request not found');
     const brief = await this.repo.getBrief(prId, console);
-    return { brief };
+    // Staleness is computed on read, never stored (AC-17). Legacy records
+    // with generated_for_sha null are not flagged — unknown provenance ≠ stale.
+    const stale =
+      brief != null &&
+      brief.generated_for_sha != null &&
+      brief.generated_for_sha !== pull.headSha;
+    return { brief, stale };
   }
 
   /**
@@ -164,6 +170,7 @@ export class BriefService {
       tokens_out: result.tokensOut,
       cost_usd: result.costUsd,
       generated_at: new Date().toISOString(),
+      generated_for_sha: pull.headSha,
     };
 
     // 15. Persist.

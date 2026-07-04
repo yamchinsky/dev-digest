@@ -28,12 +28,13 @@ Three implementer instances over two dependency waves.
 | R7 | AC-10 | Agent-level context docs collected from all workspace agents in deterministic creation order, deduped by `(repo_id, relative_path)` (first-occurrence wins), zero-byte files silently skipped | DB-backed `.it.test.ts`: two agents with overlapping paths + one zero-byte file; each unique path read exactly once from mock clone dir; zero-byte file absent from the assembled prompt |
 | R8 | AC-11 | All untrusted text (intent, linked issue title+body, blast summary, smart-diff stats, context doc content) wrapped with `wrapUntrusted`; `INJECTION_GUARD` in system message | Hermetic unit: all five input types enclosed in `<untrusted …>` delimiters; system message contains the `INJECTION_GUARD` sentinel string |
 | R9 | AC-12, AC-13, AC-14, AC-15 | `PrBriefCard` renders three states (empty/generate, populated with usage line, 422-hint) and supports Regenerate with loading indicator; file links navigate to `?tab=diff&file=<path>` and the diff tab scrolls the target file card into view | e2e: empty state visible with no content fields (AC-12); populated card is first element above Intent+Blast grid (AC-13); 422 hint state after no-intent POST (AC-14); Regenerate shows loading then updates content (AC-15); file link click navigates to diff tab and matching FileCard is visible in viewport |
+| R10 | AC-16, AC-17, AC-18 | Brief staleness: `generated_for_sha` persisted at generation; `GET` returns a computed `stale` flag with no LLM call; `PrBriefCard` shows an accessible "Outdated" indicator when stale | DB-backed `.it.test.ts`: POST persists `generated_for_sha === pull.head_sha`; GET → `stale: true` on SHA mismatch, `false` on match / legacy-null / no-brief, mock LLM 0 calls; component/e2e: Outdated badge visible iff `stale: true` |
 
 ### Descoped ACs
 
-None — all 15 ACs are covered above. AC-1, AC-2 → R1; AC-3 → R2; AC-4, AC-8 → R3;
+None — all 18 ACs are covered above. AC-1, AC-2 → R1; AC-3 → R2; AC-4, AC-8 → R3;
 AC-5 → R4; AC-6, AC-7 → R5; AC-9 → R6; AC-10 → R7; AC-11 → R8;
-AC-12, AC-13, AC-14, AC-15 → R9.
+AC-12, AC-13, AC-14, AC-15 → R9; AC-16, AC-17, AC-18 → R10.
 
 ### Open recommendations
 
@@ -841,6 +842,33 @@ Owned paths across tasks MUST be disjoint — no file appears in two tasks.
   - `"use client"` at the top of `PrBriefCard.tsx` is required because it uses
     `useRouter`, `useSearchParams`, and `useParams`.
 
+### T4 — Staleness flag (head SHA) · type: fullstack · covers: R10
+
+**Added 2026-07-04** — spec change: SPEC-03 AC-16–AC-18 moved head-SHA
+staleness tracking from Non-goals into scope (external-review follow-up).
+Auto-regeneration stays out of scope: detection + badge only, zero new LLM
+calls.
+
+**Owned paths:**
+- `server/src/vendor/shared/contracts/brief.ts` + vendored copy `client/src/vendor/shared/contracts/brief.ts`
+- `server/src/modules/brief/service.ts`, `server/src/modules/brief/routes.ts`
+- `client/src/lib/hooks/brief.ts`
+- `client/src/app/repos/[repoId]/pulls/[number]/_components/PrBriefCard/PrBriefCard.tsx` + `styles.ts`
+- `client/messages/en/brief.json`
+
+**Steps:**
+1. `BriefRecord` gains `generated_for_sha: z.string().nullable().default(null)` in BOTH vendored contract copies — the default keeps legacy jsonb rows valid on the `safeParse` read path (F2 unchanged).
+2. `generateBrief` sets `generated_for_sha: pull.headSha` when building the `BriefRecord` (step 14).
+3. `getBrief` computes `stale = brief != null && brief.generated_for_sha != null && brief.generated_for_sha !== pull.headSha` and returns `{ brief, stale }`; `BriefGetResponse` route schema gains `stale: z.boolean()` (serializerCompiler runtime gate).
+4. Client `BriefGetResponse` interface gains `stale: boolean`; `useGenerateBrief.onSuccess` cache write becomes `{ brief: data.brief, stale: false }`.
+5. `PrBriefCard` renders an "Outdated" badge (`role="status"`, accessible text label) beside the risk-level badge when `data.stale`; new i18n key in `brief.json`.
+
+**Acceptance:** new commit on a PR with an existing brief → `GET` returns `stale: true` and the card shows the Outdated badge; Regenerate clears it; legacy brief rows (no `generated_for_sha`) → `stale: false`; typecheck green in both packages.
+
+**Skills (mandatory):** `zod`, `typescript-expert`, `react-best-practices`.
+
+**Verify:** `cd server && pnpm exec tsc --noEmit && cd ../client && pnpm exec tsc --noEmit`
+
 ---
 
 ## Test intents
@@ -896,6 +924,14 @@ land in the run's manual checklist after each wave commit.
   element is in viewport. (3) PR with no `pr_intent` row: click Generate Brief;
   assert inline hint text with intent reference visible (global toast also fires —
   both are part of the expected outcome). (AC-12, AC-13, AC-14, AC-15)
+
+- **R10** → `server-it`: seed PR `head_sha = "new"`; brief JSON with
+  `generated_for_sha: "old"` → GET `stale: true`; matching SHA → `stale: false`;
+  legacy JSON without the field → `stale: false`; no row → `{ brief: null,
+  stale: false }`; mock LLM 0 calls throughout. POST path: assert persisted
+  `generated_for_sha` equals the PR's seeded head SHA. Client: `PrBriefCard`
+  renders the Outdated badge iff GET returns `stale: true` (component test or
+  e2e). (AC-16, AC-17, AC-18)
 
 ---
 

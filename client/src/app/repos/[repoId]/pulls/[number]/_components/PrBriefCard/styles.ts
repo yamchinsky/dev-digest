@@ -27,6 +27,20 @@ export const s = {
     gap: 16,
   } satisfies CSSProperties,
 
+  /** Header-right slot: Outdated badge + Regenerate button on one row. */
+  headerActions: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+  } satisfies CSSProperties,
+
+  /** Amber badge shown when the brief predates the PR's current head SHA. */
+  staleBadge: {
+    ...riskBadgeBase,
+    color: "var(--warn)",
+    background: "var(--warn-bg)",
+  } satisfies CSSProperties,
+
   /** Color-coded badge per risk level (low/medium/high). */
   riskBadge: {
     low: { ...riskBadgeBase, color: "var(--sugg)", background: "var(--sugg-bg)" } satisfies CSSProperties,

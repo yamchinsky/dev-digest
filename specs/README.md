@@ -17,9 +17,9 @@ mirror, design rationale, and fixtures that aren't checked-in TS.
 
 Spec-Driven Development specifications that touch **two or more modules**
 (single-module specs live in `<module>/specs/`). Written by the
-`spec-creator` skill (`.claude/skills/spec-creator/` — template and EARS
-guide live there); consumed downstream by the `implementation-planner` agent
-(spec → plan → implementation).
+`spec-creator` agent (`.claude/agents/spec-creator.md` — template and EARS
+guide in `.claude/references/spec-creator/`); consumed downstream by the
+`implementation-planner` agent (spec → plan → implementation).
 
 Conventions:
 
@@ -34,7 +34,7 @@ Conventions:
 <!-- one line per spec, appended by spec-creator -->
 - [SPEC-01 — Project Context Folder](SPEC-01-2026-07-project-context-folder.md) — attach repo markdown specs/docs/insights to agents and skills so reviewers enforce project contracts, not just generic best practices (implemented)
 - [SPEC-02 — Onboarding Generator](SPEC-02-2026-07-onboarding-generator.md) — one-LLM-call tour of an unfamiliar repo: architecture overview, critical paths, rank-ordered reading list, and first tasks, powered by the existing repo-intel index (draft)
-- [SPEC-03 — PR Why + Risk Brief](SPEC-03-2026-07-pr-why-risk-brief.md) — one-LLM-call synthesis of intent, blast, and smart-diff into a grounded what/why/risk brief with a ranked reading-focus list, surfaced above the Overview tab cards (draft)
+- [SPEC-03 — PR Why + Risk Brief](SPEC-03-2026-07-pr-why-risk-brief.md) — one-LLM-call synthesis of intent, blast, and smart-diff into a grounded what/why/risk brief with a ranked reading-focus list, surfaced above the Overview tab cards (implemented)
 
 Link new files from `AGENTS.md` via the `Read … when …` block so they
 actually get read.
