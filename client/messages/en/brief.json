@@ -17,12 +17,14 @@
     "reviewFocus": "Review Focus"
   },
   "usage": "{tokensIn} → {tokensOut} tokens · {costUsd}",
+  "stale": "Outdated",
   "actions": {
     "generate": "Generate Brief",
     "regenerate": "Regenerate"
   },
   "a11y": {
     "riskBadge": "Risk level: {level}",
-    "fileLink": "Go to diff for {file}"
+    "fileLink": "Go to diff for {file}",
+    "staleBadge": "Brief is outdated — the PR has new commits since it was generated"
   }
 }

@@ -9,6 +9,8 @@ import type { BriefRecord } from "@devdigest/shared";
 /** Shape returned by GET /pulls/:id/brief */
 export interface BriefGetResponse {
   brief: BriefRecord | null;
+  /** true when the brief was generated for an older head SHA (new commits since). */
+  stale: boolean;
 }
 
 /** Shape returned by POST /pulls/:id/brief (generate) */
@@ -33,7 +35,8 @@ export function useGenerateBrief(prId: string) {
     mutationFn: () => api.post<BriefPostResponse>(`/pulls/${prId}/brief`, {}),
     onSuccess: (data) => {
       // Write the new brief into the GET cache immediately — no refetch wait.
-      qc.setQueryData(["brief", prId], { brief: data.brief });
+      // A just-generated brief is never stale by definition.
+      qc.setQueryData<BriefGetResponse>(["brief", prId], { brief: data.brief, stale: false });
     },
   });
 }

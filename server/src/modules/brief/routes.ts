@@ -20,6 +20,8 @@ import { BriefService } from './service.js';
 
 const BriefGetResponse = z.object({
   brief: BriefRecord.nullable(),
+  // true when the brief was generated for an older head SHA (AC-17).
+  stale: z.boolean(),
 });
 
 const BriefPostResponse = z.object({

@@ -77,16 +77,24 @@ export function PrBriefCard({ prId }: { prId: string }) {
       <SectionLabel
         icon="FileText"
         right={
-          <Button
-            kind="ghost"
-            size="sm"
-            icon="RefreshCw"
-            loading={generate.isPending}
-            disabled={generate.isPending}
-            onClick={() => generate.mutate()}
-          >
-            {t("actions.regenerate")}
-          </Button>
+          <span style={s.headerActions}>
+            {/* Outdated badge — brief predates the PR's current head SHA (AC-18) */}
+            {data.stale && (
+              <span style={s.staleBadge} role="status" aria-label={t("a11y.staleBadge")}>
+                {t("stale")}
+              </span>
+            )}
+            <Button
+              kind="ghost"
+              size="sm"
+              icon="RefreshCw"
+              loading={generate.isPending}
+              disabled={generate.isPending}
+              onClick={() => generate.mutate()}
+            >
+              {t("actions.regenerate")}
+            </Button>
+          </span>
         }
       >
         {t("title")}

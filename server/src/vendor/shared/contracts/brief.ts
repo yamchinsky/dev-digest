@@ -167,5 +167,9 @@ export const BriefRecord = z.object({
   tokens_out: z.number().int(),
   cost_usd: z.number().nullable(),
   generated_at: z.string(), // ISO 8601
+  // Head SHA the brief was generated for (AC-16); the default keeps legacy
+  // jsonb rows (persisted before the field existed) valid on the safeParse
+  // read path — they surface as null and are never flagged stale.
+  generated_for_sha: z.string().nullable().default(null),
 });
 export type BriefRecord = z.infer<typeof BriefRecord>;

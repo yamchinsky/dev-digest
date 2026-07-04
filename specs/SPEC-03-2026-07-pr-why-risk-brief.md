@@ -1,4 +1,4 @@
-# Spec: PR Why + Risk Brief  |  Spec ID: SPEC-03  |  Status: draft
+# Spec: PR Why + Risk Brief  |  Spec ID: SPEC-03  |  Status: implemented
 Supersedes: —
 Modules: server, client
 
@@ -9,7 +9,7 @@ PR reviewers arrive at the Overview tab with three immediate questions — what 
 ## Goals / Non-goals
 
 **Goals:**
-- Expose `GET /pulls/:id/brief` (returns `{ brief: BriefRecord | null }`, never 404) and `POST /pulls/:id/brief` (always regenerates and overwrites the cache), both scoped to the caller's workspace.
+- Expose `GET /pulls/:id/brief` (returns `{ brief: BriefRecord | null, stale: boolean }`, never 404) and `POST /pulls/:id/brief` (always regenerates and overwrites the cache), both scoped to the caller's workspace.
 - Synthesise a `Brief` — `{ what, why, risk_level, risks[], review_focus[] }` — via exactly one structured LLM call using the workspace-configured `risk_brief` feature model (registry default: openai/gpt-4.1); draw inputs exclusively from: persisted intent, blast radius summary, smart-diff file-group statistics (no diff bodies or hunk content), resolved linked issue, and deduplicated agent-level context docs read from the repository clone.
 - Ground every generated `Risk` item's file references and every `review_focus` item's file against the PR changed file set (union of blast changed-symbol files and smart-diff file paths); drop items that cannot be grounded to any PR file.
 - Persist `BriefRecord` (brief data + usage metadata: `tokens_in`, `tokens_out`, `cost_usd`, `generated_at`) to the existing `pr_brief` table (no schema migration required); serve the cached record on `GET` with no LLM call; cache is eternal until an explicit `POST` (Regenerate).
@@ -19,7 +19,7 @@ PR reviewers arrive at the Overview tab with three immediate questions — what 
 **Non-goals:**
 - WhyTimeline: per-commit history of brief changes — explicitly deferred as future work.
 - Pre-call token truncation: the server does not truncate inputs before the LLM call; the ≤ 8 000 token budget (AC-9) is verified post-call via `tokens_in` in the provider response.
-- Auto-invalidation of the cached brief when the PR receives new commits (head-SHA change) — explicit Regenerate only; head-SHA staleness tracking is future work.
+- Auto-regeneration of the brief when the PR receives new commits: the system tracks head-SHA staleness (`generated_for_sha`, AC-16–AC-18) and prompts an explicit Regenerate; it never auto-triggers an LLM call on a head-SHA change.
 - Auto-computation of intent when absent: `POST /brief` returns 422 and never initiates a second LLM call.
 - Streaming the brief to the client during generation.
 - Skill-level context docs in the brief LLM input: only agent-level context docs (`agent_context_docs`) are collected.
@@ -82,6 +82,14 @@ PR reviewers arrive at the Overview tab with three immediate questions — what 
 
 - **AC-15** — WHEN a user activates the Regenerate control on `PrBriefCard`, the system SHALL send `POST /pulls/:id/brief`, display a loading indicator on the card during the request, and replace the displayed brief content with the new `BriefRecord` upon successful completion. (covers: US-4)
 
+### Staleness (head SHA)
+
+- **AC-16** — WHEN the server persists a generated brief, the system SHALL record the PR's current head SHA in the stored `BriefRecord` as `generated_for_sha`. (covers: US-4)
+
+- **AC-17** — WHEN a client requests `GET /pulls/:id/brief`, the system SHALL include `stale: boolean` in the response — `true` when a persisted brief exists whose `generated_for_sha` is non-null and differs from the PR's current head SHA, `false` otherwise (matching SHA, legacy record with `generated_for_sha` null, or no brief) — and the staleness check SHALL NOT initiate an LLM call. (covers: US-4)
+
+- **AC-18** — WHEN the Overview tab renders a brief and the `GET` response carries `stale: true`, the system SHALL display an "Outdated" indicator on `PrBriefCard` with an accessible text label, alongside the existing Regenerate control. (covers: US-4)
+
 ## Verification hints
 
 - AC-1 — DB-backed `*.it.test.ts`: seed a PR with a `pr_intent` row but no `pr_brief` row; call `GET /pulls/:id/brief`; assert the response is HTTP 200 with body `{ brief: null }`.
@@ -99,6 +107,9 @@ PR reviewers arrive at the Overview tab with three immediate questions — what 
 - AC-13 — e2e flow: seed a `pr_brief` row with known content; navigate to PR Overview tab; assert `PrBriefCard` is the first rendered child of the OverviewTab root element in DOM order (before the IntentCard+BlastRadiusCard grid container); assert `what`, `why`, and `risk_level` badge elements are visible; assert at least one `review_focus` row with a navigable link is present; assert the usage line text matches the seeded token counts.
 - AC-14 — e2e flow: PR with no `pr_intent` row; navigate to Overview tab; click "Generate" on `PrBriefCard`; assert the 422 hint-state element becomes visible and contains text referencing intent computation.
 - AC-15 — e2e flow: PR with seeded `pr_brief` and `pr_intent` rows; click Regenerate; assert loading indicator appears on `PrBriefCard`; after the mock POST resolves, assert the brief content in the DOM reflects the new response values.
+- AC-16 — DB-backed `*.it.test.ts`: seed a PR with a known `head_sha`; call `POST /pulls/:id/brief`; read the persisted `pr_brief.json`; assert `generated_for_sha` equals the seeded head SHA.
+- AC-17 — DB-backed `*.it.test.ts`: (a) seed a brief with `generated_for_sha` differing from the PR's `head_sha` → `GET` returns `stale: true`; (b) matching SHA → `stale: false`; (c) seeded legacy JSON without the field → `stale: false`; (d) no brief row → `{ brief: null, stale: false }`; mock LLM adapter records zero calls in all four cases.
+- AC-18 — component test / e2e flow: render `PrBriefCard` with a `GET` response carrying `stale: true`; assert the Outdated indicator is visible with an accessible label; with `stale: false` assert the indicator is absent.
 
 ## Edge cases
 
@@ -115,6 +126,7 @@ PR reviewers arrive at the Overview tab with three immediate questions — what 
 - **Concurrent POST requests**: Two simultaneous `POST /pulls/:id/brief` requests for the same PR both proceed independently; each makes exactly one LLM call; the last successful `UPSERT` into `pr_brief` wins. This is acceptable because both calls draw from the same inputs and produce semantically equivalent briefs. No data corruption occurs. A deduplication gate may be added in a future iteration; it is not required by this spec.
 - **`</untrusted>` delimiter in issue body or context doc content**: The existing `wrapUntrusted` escape mechanism neutralises this injection vector (identical to the SPEC-01 treatment).
 - **PR removed from workspace**: The `pr_brief` row is removed via the existing FK cascade from `pull_requests` — no additional cleanup is needed.
+- **Legacy brief without `generated_for_sha`**: rows persisted before the field existed parse with `generated_for_sha: null` (Zod schema default); `GET` reports `stale: false` — unknown provenance is not flagged as stale, and the reviewer can still Regenerate explicitly.
 
 ## Non-functional
 
@@ -175,7 +187,7 @@ sequenceDiagram
 
 | Resource / field | Type | Semantics |
 |---|---|---|
-| `GET /pulls/:id/brief` | → `{ brief: BriefRecord \| null }` | Returns cached brief; `null` when none generated yet; HTTP 200 in both cases; never 404; workspace auth required |
+| `GET /pulls/:id/brief` | → `{ brief: BriefRecord \| null, stale: boolean }` | Returns cached brief; `null` when none generated yet; HTTP 200 in both cases; never 404; workspace auth required; `stale` computed on read (AC-17), never stored |
 | `POST /pulls/:id/brief` | → `{ brief: BriefRecord, dropped_items: integer }` or 422 | Regenerates and overwrites the cache; 422 with `code: "intent_required"` when the PR has no persisted intent; workspace auth required |
 | `BriefRecord.what` | `string` | LLM-generated one-paragraph description of what the PR does |
 | `BriefRecord.why` | `string` | LLM-generated explanation of the motivation for the change |
@@ -189,6 +201,7 @@ sequenceDiagram
 | `BriefRecord.tokens_out` | `integer` | Completion token count from the LLM provider response; stored in `pr_brief.json` |
 | `BriefRecord.cost_usd` | `number \| null` | Estimated cost in USD via the PriceBook; `null` when the model is not in the PriceBook |
 | `BriefRecord.generated_at` | ISO 8601 timestamp | Brief generation completion time; stored in `pr_brief.json` |
+| `BriefRecord.generated_for_sha` | `string \| null` | Head SHA of the PR at generation time (AC-16); `null` on legacy records persisted before the field existed — schema default keeps old jsonb rows valid |
 | `POST response.dropped_items` | `integer` | Count of `Risk` items and `review_focus` entries removed by the grounding gate; ephemeral — returned in the POST response only, not stored in `pr_brief` |
 | `pr_brief` table | `{ pr_id PK uuid, json jsonb }` | Existing scaffold table; `json` column stores the full `BriefRecord` as-is; no schema migration required |
 
