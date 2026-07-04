@@ -26,7 +26,7 @@ docs/plans/<feature>.md   (R-IDs trace to spec ACs via `Covers AC`)
 /impl (skill, main session):
   feature branch → N × implementer waves per DAG (sonnet, cap 3, shared tree)
                    │ or one single-agent pass (sequential steps)
-  → plan-verifier (coverage FIRST, sonnet subagent; test evidence = DEFERRED)
+  → plan-verifier agent (coverage FIRST, sonnet; test evidence = DEFERRED)
   → gap-fix loop (≤2 iterations)
   → architecture-reviewer (sonnet) → arch-fix loop (≤3, to APPROVE)
   → test intents + DEFERRED rows → manual checklist  [test-writer DISABLED]
@@ -44,6 +44,8 @@ docs/plans/<feature>.md   (R-IDs trace to spec ACs via `Covers AC`)
 | `implementer` | Builds **one** task of a plan; greens the existing tests | `sonnet` | Yes (its task's Owned paths) | `typescript-expert`, `security` core; loads its task's `Skills (mandatory)` list via `Skill` at start | Yes (file-scoped, shared tree) |
 | `test-writer` | **DISABLED** (token economy; file is `test-writer.md.disabled` — rename back to `.md` to re-enable). Writes client RTL/Vitest tests and server Fastify/Drizzle tests against the plan's `## Test intents` + spec hints | `sonnet` | Yes (test files only) | `react-testing-library`, `typescript-expert`, `fastify-best-practices`, `drizzle-orm-patterns`, `onion-architecture` | — |
 | `architecture-reviewer` | Macro-level architecture review (layering, dependency direction, module boundaries); returns structured findings + verdict | `sonnet` | No | `onion-architecture`, `frontend-architecture` | — |
+| `plan-verifier` | Requirement-coverage check of an Implementation Plan against the tree: coverage matrix + ALL COVERED / GAPS FOUND verdict; spec AC cross-check | `sonnet` | No | — (loads `typescript-expert` on demand via `Skill`; worked example in `.claude/references/plan-verifier/examples.md`) | — |
+| `doc-writer` | Documents already-implemented functionality: Diátaxis type selection, repo placement, captioned Mermaid diagrams | `sonnet` | Yes (docs only — never product code) | — (loads `mermaid-diagram` on demand via `Skill`; sources in `.claude/references/doc-writer/references.md`) | — |
 
 Per-task skills come from `.claude/skills/pr-self-review/routing.md`: the
 planner assigns them **by name** to each task; each implementer instance loads
@@ -228,6 +230,43 @@ concrete ring/layer vocabulary for this repo.
 - code.claude.com/docs/en/sub-agents
 
 ---
+
+## `plan-verifier`
+
+A read-only requirement-coverage agent. Given a `docs/plans/<feature>.md`
+(plus a pre-tests flag and an optional re-check scope from the caller), it
+maps every R-ID and measurable acceptance criterion to concrete evidence
+(`path:line`, test name, migration), runs the spec AC cross-check when the
+plan names a `SPEC-NN`, and returns the coverage matrix with an ALL COVERED /
+GAPS FOUND verdict as its final message. Statuses follow a fixed rubric
+(COVERED / PARTIAL / MISSING / DEFERRED-in-pre-tests-mode); evidence is never
+asserted without being located. Coverage only: quality goes to
+`pr-self-review`, layering to `architecture-reviewer`; it proposes no fixes.
+Invoked by the `impl` skill after the last implementer wave (before the
+architecture review) or directly by the user ("verify the plan"). A complete
+worked run lives in `.claude/references/plan-verifier/examples.md`.
+
+**Based on:** `implementation-planner`'s output contract (the structures it
+parses); the `architecture-reviewer` read-only-reviewer template; formerly a
+project skill of the same name — fully converted to an agent (methodology
+moved into the agent body) so the SDD verification role lives in one place.
+
+## `doc-writer`
+
+A documentation-authoring agent. Selects one Diátaxis type per document
+(Reference / How-to / Explanation / Tutorial), places the file per its repo
+placement table (module READMEs, `docs/<topic>.md`, `docs/adr/`,
+`<module>/specs/`), embeds captioned Mermaid diagrams (syntax via the
+`mermaid-diagram` skill, loaded on demand), and documents only what is
+already in the code — never planned-but-unimplemented APIs. Writes are
+docs-only; product code, tests, config, and `INSIGHTS.md` (owned by
+`engineering-insights`) are off-limits. Downstream of `implementer` in the
+pipeline; NOT for specs (`spec-creator`) or plans (`implementation-planner`).
+
+**Based on:** Diátaxis, MADR, Mermaid/C4 (source list in
+`.claude/references/doc-writer/references.md`); formerly a project skill of
+the same name — fully converted to an agent so the SDD documentation role
+lives in one place.
 
 ## Shared design principles → sources
 

@@ -26,7 +26,7 @@ spec-creator (manual) → SPEC-NN → implementation-planner (manual)
     → /impl (THIS SKILL, main session):
         0. preflight: plan + spec + feature branch
         1. implementer waves per DAG (cap 3) | sequential steps
-        2. plan-verifier — coverage gate, FIRST (sonnet subagent)
+        2. plan-verifier agent — coverage gate, FIRST (sonnet)
         3. gap-fix loop (max 2 iterations)
         4. architecture-reviewer → arch-fix loop (≤3, until APPROVE)
         5. test intents + DEFERRED rows → manual checklist (test-writer is
@@ -100,12 +100,13 @@ same prompt contract; the verify/review tail below is identical.
 
 ## 2. Coverage gate — plan-verifier FIRST
 
-Immediately after the last wave, run the `plan-verifier` skill on the plan —
-**inside a `general-purpose` subagent with `model: sonnet`**: pass it the
-plan path and the pre-tests flag, and have it return the coverage matrix as
-its final message. This keeps the grep-heavy verification off the expensive
-model and out of the main context; fall back to invoking the skill inline
-only if the subagent's matrix comes back malformed.
+Immediately after the last wave, spawn the **`plan-verifier` agent**
+(`.claude/agents/plan-verifier.md` — sonnet, self-contained methodology):
+pass it the plan path and the pre-tests flag, and have it return the
+coverage matrix as its final message. This keeps the grep-heavy verification
+off the expensive model and out of the main context; if the matrix comes
+back malformed, re-spawn the agent once with a corrected prompt before
+falling back to verifying inline.
 
 Run it **before** the architecture review: a coverage gap means a follow-up
 implementer will change the diff, and anything reviewed before that gets
@@ -155,7 +156,7 @@ findings caused by a fix.
 
 ## 4. Final re-check + manual checklist
 
-- Re-run plan-verifier (same sonnet-subagent pattern) on **previously-gapped
+- Re-run the plan-verifier agent (same pattern) on **previously-gapped
   rows only** after the gap-fix and arch-fix loops settle.
 - Collect into a **manual checklist** in the final report:
   - all `DEFERRED` test-evidence rows + the plan's `## Test intents`
