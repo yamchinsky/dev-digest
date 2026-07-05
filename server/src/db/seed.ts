@@ -8,6 +8,7 @@ import {
   PERFORMANCE_REVIEWER_PROMPT,
   TEST_QUALITY_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { seedEvalCases } from './seed-eval-cases.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -351,6 +352,10 @@ Flag the following:
       if (links.length > 0) await db.insert(t.agentSkills).values(links);
     }
   }
+
+  // L06: five demo eval cases for the General Reviewer (idempotent by
+  // (workspace_id, owner_id, name) — see seed-eval-cases.ts).
+  await seedEvalCases(db);
 
   return { workspaceId, userId };
 }
