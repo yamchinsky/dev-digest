@@ -1,0 +1,270 @@
+# Harness evals — quality gates for the probabilistic components (.claude/skills,
+# .claude/agents, CLAUDE.md). A text edit to any of them can silently break behaviour
+# with no type error, so this workflow runs the matching evals/ suite on every PR:
+#
+#   .claude/skills/<name>/**  → vitest run skills/<name>   (if evals/skills/<name>/ exists)
+#   .claude/agents/<name>.md  → vitest run agents/<name>   (if evals/agents/<name>/ exists)
+#   CLAUDE.md / agent change  → pnpm eval:workflow          (systemic tier: dispatch,
+#                                skill activation, CLAUDE.md read-when)
+#   evals/** infra change     → pnpm eval:workflow as a smoke test
+#
+# A changed skill/agent WITHOUT an eval suite produces a ::warning annotation —
+# CLAUDE.md rule: "new skill or agent → eval cases in the same commit".
+#
+# MODEL: everything runs on OpenRouter through the repo's LiteLLM proxy
+# (evals/proxy/ — the Agent SDK speaks only the Anthropic wire protocol, and
+# OpenRouter serves it only for anthropic/* slugs, so non-Anthropic models need
+# the translation). Per-tier split, from the verified table in evals/README.md
+# ("Which cheap model — verified"):
+#   skills + agents (content / read-trace tiers) → deepseek/deepseek-chat (cheapest ✅)
+#   workflow (dispatch assertions)               → google/gemini-2.5-flash (the ONLY
+#     verified model that actually dispatches subagents; deepseek works inline instead)
+#   judge → google/gemini-2.5-flash (different family than the task model, per README)
+# Switch WITHOUT editing this file via repository variables (Settings → Secrets
+# and variables → Actions → Variables): EVAL_MODEL (skills/agents),
+# EVAL_WORKFLOW_MODEL (workflow tier), EVAL_JUDGE_MODEL.
+#
+# COST/FLAKINESS: LLM-judged evals are probabilistic — do NOT mark these jobs as
+# required checks until a few weeks of pass-rate history exists. A red job here
+# is a signal to read the trace, not an automatic revert.
+name: evals
+
+on:
+  pull_request:
+    paths:
+      - '.claude/skills/**'
+      - '.claude/agents/**'
+      - 'CLAUDE.md'
+      - 'evals/**'
+      - '.github/workflows/evals.yml'
+  # Manual full-suite run (e.g. after changing the model variable).
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'OpenRouter slug for skill/agent tiers (overrides vars.EVAL_MODEL)'
+        required: false
+      workflow_model:
+        description: 'OpenRouter slug for the workflow tier (overrides vars.EVAL_WORKFLOW_MODEL)'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EVAL_BACKEND: openrouter
+  EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL || 'google/gemini-2.5-flash' }}
+  # Points at the LiteLLM proxy started inside each job (evals/proxy/).
+  OPENROUTER_BASE_URL: http://localhost:4000
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  # EVAL_MODEL is per-tier — set at job level (see the MODEL note above).
+
+jobs:
+  # Maps changed files → which eval suites to run. Pure bash + jq, no install.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      skills: ${{ steps.map.outputs.skills }}
+      agents: ${{ steps.map.outputs.agents }}
+      run_workflow: ${{ steps.map.outputs.run_workflow }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Map changed files to eval suites
+        id: map
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual run → full suite: every skill/agent that has an eval dir.
+            skills=$(ls -d evals/skills/*/ 2>/dev/null | xargs -rn1 basename || true)
+            agents=$(ls -d evals/agents/*/ 2>/dev/null | xargs -rn1 basename || true)
+            run_workflow=true
+          else
+            # Three-dot: diff from the merge-base, so files changed only on an
+            # advanced base branch don't schedule (cost-bearing) eval suites here.
+            changed=$(git diff --name-only \
+              "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}")
+            echo "changed files:"; echo "$changed"
+
+            skills=""; agents=""; run_workflow=false
+            while IFS= read -r f; do
+              case "$f" in
+                CLAUDE.md) run_workflow=true ;;
+                .claude/skills/*/*)
+                  n=${f#.claude/skills/}; n=${n%%/*}
+                  if [ -d "evals/skills/$n" ]; then skills="$skills $n"
+                  else
+                    echo "skip: skill '$n' — no eval suite (evals/skills/$n/ missing), not tested"
+                    # no file= property: $f is PR-controlled and a crafted '::' in a
+                    # path would corrupt the annotation (workflow-command surface).
+                    echo "::warning::skip: skill '$n' has no eval suite (path: $f) — CLAUDE.md rule: new skill → eval cases in the same commit"
+                  fi ;;
+                evals/skills/*/*)
+                  # -d guard: bounds matrix values to repo-controlled dir names
+                  # (a hostile path like 'evals/skills/$(cmd)/x.ts' must not
+                  # become a matrix value) and skips suites deleted by the PR.
+                  n=${f#evals/skills/}; n=${n%%/*}
+                  if [ -d "evals/skills/$n" ]; then skills="$skills $n"
+                  else echo "skip: eval suite 'skills/$n' not present in this revision — not scheduled"
+                  fi ;;
+                .claude/agents/*.md)
+                  n=$(basename "$f" .md); run_workflow=true
+                  if [ -d "evals/agents/$n" ]; then agents="$agents $n"
+                  else
+                    echo "skip: agent '$n' — no eval suite (evals/agents/$n/ missing), not tested"
+                    echo "::warning::skip: agent '$n' has no eval suite (path: $f) — CLAUDE.md rule: new agent → eval cases in the same commit"
+                  fi ;;
+                evals/agents/*/*)
+                  n=${f#evals/agents/}; n=${n%%/*}
+                  if [ -d "evals/agents/$n" ]; then agents="$agents $n"
+                  else echo "skip: eval suite 'agents/$n' not present in this revision — not scheduled"
+                  fi ;;
+                evals/workflow/*|evals/src/*|evals/proxy/*|evals/package.json|evals/pnpm-lock.yaml)
+                  run_workflow=true ;;
+              esac
+            done <<< "$changed"
+          fi
+
+          # jq filters the empty lines itself: a grep in this pipeline would exit 1
+          # on the empty case and (under pipefail) trigger a duplicated-fallback bug.
+          skills_json=$(printf '%s\n' $skills | sort -u | jq -Rn '[inputs | select(length > 0)]' -c)
+          agents_json=$(printf '%s\n' $agents | sort -u | jq -Rn '[inputs | select(length > 0)]' -c)
+          {
+            echo "skills=$skills_json"
+            echo "agents=$agents_json"
+            echo "run_workflow=$run_workflow"
+          } >> "$GITHUB_OUTPUT"
+          echo "→ skills=$skills_json agents=$agents_json run_workflow=$run_workflow"
+
+  skill-evals:
+    needs: detect
+    if: needs.detect.outputs.skills != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Content tier — README-verified ✅ on deepseek, ~2× cheaper than Gemini Flash.
+      EVAL_MODEL: ${{ inputs.model || vars.EVAL_MODEL || 'deepseek/deepseek-chat' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        skill: ${{ fromJSON(needs.detect.outputs.skills) }}
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require OPENROUTER_API_KEY secret
+        run: |
+          [ -n "$OPENROUTER_API_KEY" ] || { echo "::error::OPENROUTER_API_KEY secret is not set (Settings → Secrets → Actions)"; exit 1; }
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: evals/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start LiteLLM proxy
+        run: scripts/litellm-proxy.sh up
+
+      # env indirection, not ${{ }} inside run: — a matrix value interpolated
+      # into the script text would be evaluated by bash (script injection).
+      - name: Eval skill ${{ matrix.skill }}
+        env:
+          SKILL: ${{ matrix.skill }}
+        run: pnpm exec vitest run "skills/$SKILL"
+
+  agent-evals:
+    needs: detect
+    if: needs.detect.outputs.agents != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Read-trace tier (Read/Grep/Glob) — README-verified ✅ on deepseek.
+      EVAL_MODEL: ${{ inputs.model || vars.EVAL_MODEL || 'deepseek/deepseek-chat' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJSON(needs.detect.outputs.agents) }}
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require OPENROUTER_API_KEY secret
+        run: |
+          [ -n "$OPENROUTER_API_KEY" ] || { echo "::error::OPENROUTER_API_KEY secret is not set (Settings → Secrets → Actions)"; exit 1; }
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: evals/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start LiteLLM proxy
+        run: scripts/litellm-proxy.sh up
+
+      # env indirection, not ${{ }} inside run: — see the skill-evals note.
+      - name: Eval agent ${{ matrix.agent }}
+        env:
+          AGENT: ${{ matrix.agent }}
+        run: pnpm exec vitest run "agents/$AGENT"
+
+  # Systemic tier: real CLAUDE.md + skills + agent registry loaded from disk
+  # (settingSources: ["project"]). Verifies dispatch, activation, and read-when
+  # behaviour — the things content-tier evals deliberately can't see.
+  workflow-evals:
+    needs: detect
+    if: needs.detect.outputs.run_workflow == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Dispatch assertions pass ONLY on Gemini Flash (evals/README.md verified
+      # table): deepseek/gpt-4.1-mini do the work inline instead of dispatching.
+      EVAL_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_MODEL || 'google/gemini-2.5-flash' }}
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require OPENROUTER_API_KEY secret
+        run: |
+          [ -n "$OPENROUTER_API_KEY" ] || { echo "::error::OPENROUTER_API_KEY secret is not set (Settings → Secrets → Actions)"; exit 1; }
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: evals/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start LiteLLM proxy
+        run: scripts/litellm-proxy.sh up
+
+      - name: Workflow-tier evals
+        run: pnpm eval:workflow
