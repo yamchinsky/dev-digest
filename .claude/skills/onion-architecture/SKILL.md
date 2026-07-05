@@ -302,4 +302,32 @@ NEW BACKEND FILE → WHAT IS IT?
 
 ---
 
+## 13. `repository.ts` is module-private — no cross-module imports (CRITICAL)
+
+A `repository.ts` file **belongs exclusively to its own module**. No file outside `modules/<name>/` may import from another module's `repository.ts`. This is the hard boundary that keeps Drizzle queries contained and prevents service-layer coupling from silently spreading across the tree.
+
+**Violation example** (`webhooks/service.ts`):
+
+```typescript
+import { AgentsRepository } from '../agents/repository.js';   // ❌ CRITICAL
+import { SkillsRepository } from '../skills/repository.js';   // ❌ CRITICAL
+import { WebhooksRepository } from './repository.js';          // ✅ own module — correct
+```
+
+**Why it matters**: when a service reaches directly into a sibling module's repository, it bypasses any caching, telemetry, error translation, and invariant checks that the sibling service owns. It also makes schema migrations silently breaking across modules.
+
+**Correct alternatives** (pick one):
+
+| Need | Correct approach |
+|------|-----------------|
+| Read data from another module | Call that module's **service** (no direct repo access) |
+| Shared lookup at construction time | Define a **port interface** in `@devdigest/shared` (e.g. `AgentLookup`, `SkillLookup`), register a concrete impl in `Container`, inject via constructor |
+| Validation that requires data from two modules | Lift the validation into `platform/` as a cross-cutting helper, or wire both services through the Container |
+
+Also update `§11 Common pitfalls` reads:
+
+- **`service.ts` importing another module's `repository.ts` directly** → define a port interface in `@devdigest/shared` (e.g. `AgentLookup`) or call the sibling's service; never cross the module boundary at the Drizzle layer.
+
+---
+
 For concrete code skeletons of each common task, see [examples.md](examples.md).

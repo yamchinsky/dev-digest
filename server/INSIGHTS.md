@@ -10,6 +10,11 @@ _None yet._
 
 ## What Doesn't Work
 
+### pgvector queries return zero rows when column dimension doesn't match embeddings model output
+_2026-07-05_ · `server/src/db/schema/` (pgvector columns), `server/src/adapters/embeddings/` (model resolution)
+
+After switching embeddings models (e.g. OpenAI `text-embedding-3-small` → `text-embedding-3-large`), pgvector queries that worked with the old model start silently returning zero rows. The cause: the column was created with a specific vector dimension (1536 vs 3072) matching the old model's output, but changing the model changes the input vector dimension without migrating the table. PostgreSQL silently rejects the distance calculation when dimensions don't match — no error, no warning, just an empty result set. Next time: after switching `EMBEDDINGS_MODEL` or updating the embedder, check the existing column's dimension in `information_schema.columns` or run a test query; if it doesn't match the new model's output size, back-fill with embeddings from the new model or create a new column.
+
 ### A non-OpenRouter model silently shows "—" cost unless its id is in pricing.ts
 _2026-06-20_ · `server/src/platform/price-book.ts:34-39`, `server/src/adapters/llm/pricing.ts`, `server/src/db/seed.ts:11-13`
 

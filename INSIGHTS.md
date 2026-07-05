@@ -39,6 +39,26 @@ _2026-07-02_ · `docs/plans/project-context.md:405` (T10), `.claude/skills/plan-
 
 SPEC-01 T10 was implemented exactly per plan into `SkillEditor.tsx`, but that component is only mounted at `/skills/new` in create mode while the new section was gated `isEdit && existing` — so the shipped feature was unreachable from any screen, despite green typecheck, tests, plan-verifier coverage, arch review, and PR review. Two-layer failure: the **plan** named the wrong owned path (the legacy `SkillEditor` instead of the actually-mounted `SkillsLab` → `SkillDetail` tabs — verify a component's mount points with grep before assigning it as an owned path), and **plan-verifier** accepted "component + hooks exist in the named file" as evidence without tracing the render path from a routed page. For UI acceptance criteria, evidence must include the mount chain (`page.tsx → … → component`), not just the diff. Found only by manually comparing the running app against the design mockups; fixed 2026-07-02 by moving the feature to a real Context tab in `SkillsLab`.
 
+### Agent dispatch via text-in-prompt is unreliable — model prefers inline handling over Agent tool call
+_2026-07-05_ · `.claude/skills/onion-architecture-workspace/` (system-eval, `repo-wide`)
+
+Workflow experiment: an agent was explicitly told "use the Agent tool with subagent_type='architecture-reviewer' to perform this review" — it still handled the task inline and reported `dispatched=false, findings=0`. The instruction was present in the prompt; the model simply chose not to follow it. Contrast: CLAUDE.md "Read when" directives caused an agent to read 17 files correctly (treatment vs control: 17 reads vs 0). The difference is that file-read instructions are grounded in a concrete action ("read this file"), while agent-dispatch instructions require the model to choose a different execution path it could satisfy itself. Practical implication: you cannot reliably enforce agent routing through prompt text alone — it needs a system-level mechanism (`settingSources: ["project"]`, a hook, or a workflow harness that spawns the target agent directly). If architecture-reviewer must fire on every backend PR, it must be spawned explicitly by the orchestrating workflow — not left to the model's routing judgment.
+
+### Skill eval fixtures must live in `evals/skills/<name>/`, NOT inside `.claude/skills/<name>/evals/`
+_2026-07-05_ · `evals/README.md`, `evals/src/artifacts/load.ts` (`repo-wide` tooling)
+
+The `evals/` package's `skillContent()` loads `SKILL.md` and `references/*.md` when assembling the skill's system prompt for a test run. Placing fixtures inside `.claude/skills/<name>/evals/` risks leaking eval-specific content into the assembled prompt (the `evals/` README warns this explicitly: "a fixture there would leak into the assembled prompt"). The correct layout is: skill payload in `.claude/skills/<name>/` (SKILL.md, references/, scripts/), eval cases and fixtures in `evals/skills/<name>/` (*.cases.ts, fixtures/). We built an entire eval suite for `onion-architecture` in the wrong location — it needs to be migrated to `evals/skills/onion-architecture/` before it can integrate with `pnpm eval:skills`, `pnpm eval:repeat`, and `pnpm eval:benchmark`.
+
+### `pnpm eval:repeat -n 5` silently caps to 2 runs — "token economy" mode
+_2026-07-05_ · `evals/src/repeat.ts` (`repo-wide` tooling)
+
+Running `pnpm eval:repeat skills/onion-architecture -n 5 --label candidate` printed `[capping -n 5 → 2 (token economy)]` and executed only 2 runs, not 5. The cap is applied silently (one dim log line) with no flag to override it in the output. With n=2 the stddev column prints "indicative only" and the statistics are unreliable. To get 5 real runs you must find and adjust the token-economy cap in `evals/src/repeat.ts` or `evals/src/config.ts` — or check if `EVAL_QUIET` / another env var disables it. Plan repeat-count budgets accordingly: the CLI argument is an upper bound, not a guarantee.
+
+### `eval:delta` overall and per-practice rates can appear contradictory when grounding fails
+_2026-07-05_ · `evals/src/delta.ts` (`repo-wide` tooling)
+
+`eval:delta` showed overall 100% → 50% (Δ −50) while every individual practice was 100% → 100% (Δ 0). This is not a bug: the overall rate counts runs where the **grounding check failed** as case-failures, but those runs produce no per-practice data — so per-practice averages are computed only over the subset of grounding-passing runs and look fine. With n=2 a single grounding failure accounts for −50 overall. Root cause here: the grounding strings were file-path fragments (`agents/repository`) — the model paraphrased instead of quoting the path verbatim, failing the substring check. Use class names (`AgentsRepository`) rather than path segments as grounding strings; they survive paraphrase. When you see a delta with a large overall drop but zero per-practice movement, check how many runs passed grounding before concluding the skill regressed.
+
 ## Codebase Patterns
 _None yet._
 

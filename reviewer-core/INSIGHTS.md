@@ -26,7 +26,11 @@ The engine is "pure" but does **not** own its core `Finding` type — it imports
 _None yet._
 
 ## Recurring Errors & Fixes
-_None yet._
+
+### Fresh clone/server boot fails with `ERR_MODULE_NOT_FOUND: 'openai'` from `reviewer-core/src/llm/structured.ts`
+_2026-07-05_ · `reviewer-core/` (repo bootstrapping)
+
+`server/` resolves `@devdigest/reviewer-core` to `reviewer-core/src` as raw TypeScript via a tsconfig path alias, but `reviewer-core/` is its own npm package with its own `node_modules` — `pnpm install` in `server/` or `client/` never populates it. On a fresh clone (or after any clean), `npm run dev` in `server/` crashes on the first code path touching the review engine, and the error only names `reviewer-core`'s internal file, not "you forgot to install this package." Fix: `cd reviewer-core && npm install`.
 
 ## Session Notes
 _None yet._
