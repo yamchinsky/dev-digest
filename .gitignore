@@ -24,3 +24,6 @@ test-results/
 
 # emdash worktree config (local)
 .emdash.json
+
+# skill-creator run outputs (ephemeral, per-iteration)
+.claude/skills/*-workspace/

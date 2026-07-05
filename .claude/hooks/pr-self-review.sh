@@ -74,6 +74,38 @@ if [ "$is_gh_pr_create" -eq 1 ]; then
   esac
 fi
 
+# --- verdict recognition: honor a fresh cached PASS ---------------------
+# The pr-self-review skill (Step 8) writes .claude/cache/pr-self-review/<hash>.json
+# keyed by sha256 of the diff vs merge-base. Without this check the gate's own
+# "re-issue the original command after PASS" instruction dead-loops (INSIGHTS
+# 2026-07-03). A fresh (<24h) PASS — or WARN under --draft — lets the command
+# through and logs the pass-through for audit.
+repo="${CLAUDE_PROJECT_DIR:-.}"
+base=$(git -C "$repo" merge-base HEAD origin/main 2>/dev/null || echo "")
+if [ -n "$base" ]; then
+  # Canonical formula from SKILL.md Step 2: command substitution strips the
+  # trailing newline, so hash printf '%s' of the captured diff — a direct pipe
+  # would include the newline and never match the skill-written cache key.
+  diff_full=$(git -C "$repo" diff --no-color "$base"...HEAD)
+  hash=$(printf '%s' "$diff_full" | shasum -a 256 | awk '{print $1}')
+  cache="$repo/.claude/cache/pr-self-review/$hash.json"
+  if [ -f "$cache" ] && [ -n "$(find "$cache" -mmin -1440 2>/dev/null)" ]; then
+    # First occurrence, non-greedy: the artifact writes the top-level verdict
+    # first; a greedy .* match could pick a "verdict" echoed inside a finding.
+    verdict=$(grep -oE '"verdict"[[:space:]]*:[[:space:]]*"[^"]*"' "$cache" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
+    allow=0
+    [ "$verdict" = "PASS" ] && allow=1
+    if [ "$verdict" = "WARN" ] && [ -n "$draft_flag" ]; then allow=1; fi
+    if [ "$allow" -eq 1 ]; then
+      ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      printf '%s\tverdict=%s\thash=%s\tcmd=%s\n' \
+        "$ts" "$verdict" "$hash" "$command" \
+        >> "$repo/.claude/cache/pr-self-review/pass-through.log"
+      exit 0
+    fi
+  fi
+fi
+
 # --- block: tell the model to run the skill ----------------------------
 if [ "$is_gh_pr_create" -eq 1 ]; then
   trigger_label="gh pr create"
