@@ -87,9 +87,11 @@ export const cases: SkillCase[] = [
   {
     name: "flags cross-module repository imports in webhooks service",
     kind: "quality",
-    // Cheap gate: the exact import paths must appear in the response before the judge runs.
-    // Without mentioning these strings the model cannot be citing the real violation.
-    grounding: ["agents/repository", "skills/repository"],
+    // Cheap gate: the offending class names must appear in the response before the judge
+    // runs. Class names, NOT path fragments — models paraphrase import paths but must name
+    // the classes to cite the violation (INSIGHTS 2026-07-05: grounding via path segments
+    // failed on paraphrase; AgentsRepository/SkillsRepository survive it).
+    grounding: ["AgentsRepository", "SkillsRepository"],
     prompt: FIXTURE,
     practices: [
       // ── Core detection (both configs should find these) ──────────────────────

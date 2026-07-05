@@ -255,6 +255,8 @@ One-line smell → one-line fix.
 - **A new long-running job kind that isn't reaped on boot** → add it to `ReviewService.reapStaleRuns` (or its equivalent) — orphaned `running` rows leak otherwise.
 - **`Schema.parse(req.body)` inside a handler** → declare the schema on the route's `body` / `params` / `querystring` so 422 happens before the handler.
 - **`reply.status(500).send({ error: ... })`** → throw an `AppError`; the global handler owns the envelope.
+- **`service.ts` method accepts `FastifyRequest`, `FastifyReply`, or any `fastify` type as a parameter** → pass only domain values (`workspaceId`, `userId`, validated body struct). Fastify types must not cross the `routes.ts → service.ts` boundary: they couple the service to the HTTP layer, make unit testing impossible without a real Fastify instance, and break the onion invariant that the application layer has no knowledge of the delivery mechanism (§14).
+- **`service.ts` importing another module's `repository.ts` directly** → define a port interface in `@devdigest/shared` (e.g. `AgentLookup`) or call the sibling's service; never cross the module boundary at the Drizzle layer (§13).
 
 ---
 
@@ -324,9 +326,37 @@ import { WebhooksRepository } from './repository.js';          // ✅ own module
 | Shared lookup at construction time | Define a **port interface** in `@devdigest/shared` (e.g. `AgentLookup`, `SkillLookup`), register a concrete impl in `Container`, inject via constructor |
 | Validation that requires data from two modules | Lift the validation into `platform/` as a cross-cutting helper, or wire both services through the Container |
 
-Also update `§11 Common pitfalls` reads:
+**How to detect**: search for `import … from '…/modules/<name>/repository'` (or `.repo`) in any file whose own path is outside `modules/<name>/` — every hit is a violation.
 
-- **`service.ts` importing another module's `repository.ts` directly** → define a port interface in `@devdigest/shared` (e.g. `AgentLookup`) or call the sibling's service; never cross the module boundary at the Drizzle layer.
+---
+
+## 14. Fastify-type isolation (CRITICAL)
+
+Services must be callable from a unit test with zero Fastify machinery. If a service method signature includes `FastifyRequest`, `FastifyReply`, `FastifyInstance`, or any import from the `fastify` package, the service is coupled to the presentation layer — a hard ring violation.
+
+**Violation shape:**
+```ts
+// ❌ routes.ts
+async (req, reply) => {
+  await service.process(req);       // passes req wholesale
+  await service.notify(reply, id);  // passes reply
+}
+```
+
+**Correct shape:**
+```ts
+// ✓ routes.ts — extract domain values, pass those
+async (req, reply) => {
+  const { workspaceId, userId } = await getContext(container, req);
+  const result = await service.process(workspaceId, req.body.input);
+  return result;
+}
+
+// ✓ service.ts — knows nothing about Fastify
+async process(workspaceId: string, input: ProcessInput): Promise<ProcessResult> { … }
+```
+
+If the service needs something from the request beyond what `getContext` returns, extract it in the route handler and pass the domain value explicitly.
 
 ---
 
