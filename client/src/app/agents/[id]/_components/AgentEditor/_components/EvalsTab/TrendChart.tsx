@@ -8,6 +8,16 @@ import { LineChart, type ChartSeries } from "@devdigest/ui";
 import type { EvalBatch } from "@devdigest/shared";
 import { s } from "./styles";
 
+/** Builds one tooltip label per batch in chronological order (oldest → newest).
+    Format: v{agent_version} · {provider}/{model} · {cost or —}  (AC-25).
+    Exported for unit testing — callers should use TrendChart for rendering. */
+export function buildTooltipLabels(batches: EvalBatch[]): string[] {
+  return batches.map((b) => {
+    const cost = b.cost_usd != null ? `$${b.cost_usd.toFixed(3)}` : "—";
+    return `v${b.agent_version} · ${b.provider}/${b.model} · ${cost}`;
+  });
+}
+
 export function TrendChart({ doneBatches }: { doneBatches: EvalBatch[] }) {
   const t = useTranslations("eval");
 
@@ -34,10 +44,12 @@ export function TrendChart({ doneBatches }: { doneBatches: EvalBatch[] }) {
     },
   ];
 
+  const tooltipLabels = buildTooltipLabels(sorted);
+
   return (
     <div style={s.section} data-testid="trend-chart">
       <div style={s.sectionTitle}>{t("dashboard.metricTrend")}</div>
-      <LineChart series={series} yMin={0} yMax={1} />
+      <LineChart series={series} yMin={0} yMax={1} tooltipLabels={tooltipLabels} />
     </div>
   );
 }

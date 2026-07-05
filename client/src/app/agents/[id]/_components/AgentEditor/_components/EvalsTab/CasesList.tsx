@@ -41,6 +41,17 @@ function getLastRunPass(
   return run ? (run.pass ?? null) : null;
 }
 
+/** Returns the recall value (0–1) for a case from the latest done batch, or
+    null when the case has never been run (AC-10). */
+function getLastRunRecall(
+  caseId: string,
+  latestDone: EvalBatchDetail | undefined,
+): number | null {
+  if (!latestDone) return null;
+  const run = latestDone.runs.find((r) => r.case_id === caseId);
+  return run ? (run.recall ?? null) : null;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -98,6 +109,7 @@ export function CasesList({
             const expectType = getExpectationType(c.expected_output);
             const fileRange = getFileRange(c.expected_output);
             const pass = getLastRunPass(c.id, latestDoneBatchDetail);
+            const recall = getLastRunRecall(c.id, latestDoneBatchDetail);
             return (
               <tr key={c.id} data-testid={`case-row-${c.id}`}>
                 <td style={s.td}>{c.name}</td>
@@ -124,6 +136,14 @@ export function CasesList({
                       ? t("evalsTab.passed")
                       : t("evalsTab.failed")}
                   </span>
+                  {recall !== null && (
+                    <span
+                      style={{ color: "var(--text-muted)", fontSize: 11, marginLeft: 4 }}
+                      data-testid={`case-recall-${c.id}`}
+                    >
+                      {t("evalsTab.recallSuffix", { recall: Math.round(recall * 100) })}
+                    </span>
+                  )}
                 </td>
                 <td style={s.td}>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>

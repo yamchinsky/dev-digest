@@ -119,7 +119,8 @@ export function useCreateEvalCaseFromFinding() {
     onSuccess: (evalCase) => {
       qc.invalidateQueries({ queryKey: evalCasesKey(evalCase.owner_id) });
       notify.success(
-        `Eval case created. View it at /agents/${evalCase.owner_id}?tab=evals`,
+        "Eval case created",
+        { href: `/agents/${evalCase.owner_id}?tab=evals` },
       );
     },
   });

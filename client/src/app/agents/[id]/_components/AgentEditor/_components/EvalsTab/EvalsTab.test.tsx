@@ -17,13 +17,13 @@
 
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { Agent, EvalCase, EvalBatch, EvalBatchDetail } from "@devdigest/shared";
 import evalMessages from "../../../../../../../../messages/en/eval.json";
 import agentsMessages from "../../../../../../../../messages/en/agents.json";
-import { ToastProvider } from "@/providers/toast";
+import { ToastProvider, notify } from "@/providers/toast";
 
 // ---------------------------------------------------------------------------
 // Shared mock state — hoisted so vi.mock() can close over them
@@ -85,6 +85,7 @@ vi.mock("@/lib/hooks/evals", () => ({
 // Import AFTER mock (vi.mock is hoisted, but the import below must come after
 // the mock call in source order so the factory runs first).
 import { EvalsTab } from "./EvalsTab";
+import { buildTooltipLabels } from "./TrendChart";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -486,5 +487,97 @@ describe("EvalsTab — AC-28: cost formatting in RunHistory", () => {
     hooksState.batchDetails.set("batch2", BATCH_DETAIL_2);
     renderWithIntl(<EvalsTab agent={AGENT} />);
     expect(screen.getByTestId("cost-batch2")).toHaveTextContent("—");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-6: success toast links to the agent's evals tab
+// ---------------------------------------------------------------------------
+
+describe("Toast — AC-6: success toast with href renders an anchor", () => {
+  it("wraps the toast message in an anchor pointing to the evals tab URL", async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{}}>
+        <ToastProvider>
+          <div />
+        </ToastProvider>
+      </NextIntlClientProvider>,
+    );
+
+    act(() => {
+      notify.success("Eval case created", { href: "/agents/agent1?tab=evals" });
+    });
+
+    const link = await screen.findByRole("link", { name: /eval case created/i });
+    expect(link).toHaveAttribute("href", "/agents/agent1?tab=evals");
+  });
+
+  it("renders plain text (no anchor) when no href is passed", async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{}}>
+        <ToastProvider>
+          <div />
+        </ToastProvider>
+      </NextIntlClientProvider>,
+    );
+
+    act(() => {
+      notify.success("Plain message");
+    });
+
+    // Text appears but no link wraps it
+    expect(await screen.findByText("Plain message")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /plain message/i })).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-10 (recall): per-case recall shown next to pass/fail badge
+// ---------------------------------------------------------------------------
+
+describe("EvalsTab — AC-10 recall: shows recall from latest batch", () => {
+  it("renders recall percentage next to the status badge for each run case", () => {
+    // Happy-path: batchDetails has run data for case1 and case2 (recall=0.9 each)
+    renderWithIntl(<EvalsTab agent={AGENT} />);
+
+    // case1: recall 0.9 → 90% in the suffix
+    const recall1 = screen.getByTestId("case-recall-case1");
+    expect(recall1).toHaveTextContent("90%");
+
+    // case2: recall 0.9 → 90%
+    const recall2 = screen.getByTestId("case-recall-case2");
+    expect(recall2).toHaveTextContent("90%");
+  });
+
+  it("omits recall suffix when no batch detail is available (never run)", () => {
+    hooksState.batchDetails.clear();
+    renderWithIntl(<EvalsTab agent={AGENT} />);
+    expect(screen.queryByTestId("case-recall-case1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("case-recall-case2")).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-25 tooltip: buildTooltipLabels formats version / provider / model / cost
+// ---------------------------------------------------------------------------
+
+describe("TrendChart — AC-25 tooltip: buildTooltipLabels label content", () => {
+  it("formats a batch with cost as v{version} · {provider}/{model} · ${cost}", () => {
+    const labels = buildTooltipLabels([BATCH_DONE_1]);
+    // BATCH_DONE_1: agent_version=3, provider="openai", model="gpt-4.1", cost_usd=0.042
+    expect(labels[0]).toBe("v3 · openai/gpt-4.1 · $0.042");
+  });
+
+  it('formats a batch without cost as "—"', () => {
+    const labels = buildTooltipLabels([BATCH_DONE_2]);
+    // BATCH_DONE_2: agent_version=2, provider="openai", model="gpt-4.1", cost_usd=null
+    expect(labels[0]).toBe("v2 · openai/gpt-4.1 · —");
+  });
+
+  it("produces one label per batch in the order supplied", () => {
+    const labels = buildTooltipLabels([BATCH_DONE_2, BATCH_DONE_1]);
+    expect(labels).toHaveLength(2);
+    expect(labels[0]).toContain("v2");
+    expect(labels[1]).toContain("v3");
   });
 });
