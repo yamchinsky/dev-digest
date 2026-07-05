@@ -69,6 +69,12 @@ packages, or a cross-module SDD feature spec (`SPEC-NN-*.md`, written by the
 obvious" decision — durable, repo-wide surprises that already bit us once.
 Module-level surprises live in `<module>/INSIGHTS.md`.
 
+**Run the matching eval before committing** when you edit any file under
+`.claude/skills/`, `.claude/agents/`, or this `CLAUDE.md`. Skills and agent
+definitions are probabilistic components — a text edit can silently break
+behaviour without a type error or unit-test failure. See *Eval harness* below
+for the change → command table.
+
 ## Non-obvious globals (don't re-derive)
 
 These bite across modules; surfacing them here avoids repeated grep:
@@ -124,3 +130,29 @@ Auto-load by trigger description; nothing to invoke manually.
 - `impl` — SDD execution orchestrator; fires on "/impl", "імплементуй план", "run the plan", "виконай план". Executes a `docs/plans/<feature>.md` end-to-end in the main session: feature branch → implementer waves per the task DAG → plan-verifier coverage gate (first, via the `plan-verifier` agent) → architecture-reviewer + arch-fix loop (≤3 iterations, to APPROVE) → spec status flip → `gh pr create` (the pr-self-review hook fires there). Specs (`spec-creator`) and plans (`implementation-planner`) are authored manually upstream; the `test-writer` agent is currently disabled — test intents land in the run's manual checklist.
 - `workflow-retro` — manual retrospective of a multi-agent run; fires on "workflow retro", "ретро прогону", "/workflow-retro". Deep mode reads subagent journals from disk (parent usage undercounts them), emits token/tool/duration/parallelism metrics + concrete recommendations, appends a trend row to `docs/retros/ledger.md`. Never hook-fired.
 - `spec-creator`, `plan-verifier`, and `doc-writer` are **agents** (`.claude/agents/*.md`), not skills — one name, one home. `spec-creator`: SDD feature-spec author upstream of `implementation-planner`; grounds via devdigest-mcp, interviews via stop-and-return rounds, writes `SPEC-NN-*.md` only into `specs/` folders. `plan-verifier`: requirement-coverage matrix for a `docs/plans/<feature>.md` (spawned by `/impl` for its coverage gate, or directly via "verify the plan"). `doc-writer`: Diátaxis-typed docs with Mermaid diagrams; writes are docs-only.
+
+## Eval harness (`evals/`)
+
+Quality evals (`evals/`) verify that skill and agent definitions produce the
+expected output. They catch silent regressions — a text edit that breaks
+behaviour without type errors or unit-test failures. All commands run from the
+`evals/` directory.
+
+**Change → eval command (run before committing):**
+
+| Changed path | Command |
+|---|---|
+| `.claude/skills/dependency-checker/**` | `pnpm vitest run skills/dependency-checker` |
+| `.claude/skills/zod/**` | `pnpm vitest run skills/zod` |
+| `.claude/agents/architecture-reviewer.md` | `pnpm vitest run agents/architecture-reviewer` |
+| `.claude/agents/architecture-reviewer-lite.md` | `pnpm vitest run agents/architecture-reviewer-lite` |
+| Any skill with a cases file | `pnpm eval:skills` |
+| Any agent with a cases file | `pnpm eval:agents` |
+| Full suite | `pnpm eval` |
+
+**Check eval coverage:** `pnpm eval:quality <skill-name>` warns when a skill
+has no matching `evals/skills/<name>/` directory.
+
+**Rule: new skill or agent → eval cases in the same commit.** An unprotected
+skill has no regression detector. Write at least one `*.cases.ts` alongside
+any new `SKILL.md` or agent `.md`.

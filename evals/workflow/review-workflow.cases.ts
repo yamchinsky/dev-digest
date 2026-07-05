@@ -23,7 +23,7 @@ export const cases: WorkflowCase[] = [
       "Я планую додати НОВИЙ, ще не реалізований ендпоінт GET /reviews/:id/export (віддає ревʼю як " +
       "markdown). Спершу звірся з конвенціями API цього репо. Потім ОБОВʼЯЗКОВО запусти сабагента " +
       "architecture-reviewer, щоб він оцінив мій план на відповідність onion-шарам — не рецензуй сам.",
-    expectFilesRead: ["server/docs/api-contracts.md"],
+    expectFilesRead: ["server/README.md"],
     expectSubagents: ["architecture-reviewer"],
     maxTurns: 8,
   },
@@ -35,11 +35,11 @@ export const cases: WorkflowCase[] = [
     // not exploring source. Earlier phrasing ("розберись, як усе влаштовано") sent the model straight
     // into schema.ts / pipeline.run.ts and it never opened the routed doc. One anchor doc (pipeline.md)
     // keeps this a deterministic routing check — asserting two docs in one session is inherently flaky.
-    name: "pipeline task follows CLAUDE.md routing to pipeline.md",
+    name: "pipeline task follows CLAUDE.md routing to reviewer-core/README.md",
     prompt:
       "Я збираюся змінити review pipeline. Перш ніж торкатися коду — звірся з настановами цього репо " +
       "(CLAUDE.md) щодо того, яку документацію треба прочитати для змін у pipeline, і прочитай саме ці документи.",
-    expectFilesRead: ["reviewer-core/docs/pipeline.md"],
+    expectFilesRead: ["reviewer-core/README.md"],
     maxTurns: 8,
   },
 
@@ -49,11 +49,11 @@ export const cases: WorkflowCase[] = [
   // reliably checks the same routing rule: in the real repo, the discovery prompt reads gotchas.md.
   {
     kind: "trace",
-    name: "CLAUDE.md routes a gotchas lookup to reviewer-core/insights",
+    name: "CLAUDE.md routes a gotchas lookup to reviewer-core/INSIGHTS.md",
     prompt:
       "У reviewer-core я стикнувся з несподіваною поведінкою — щось працює не так, як я очікував. " +
       "За настановами цього репо, де це вже могло бути задокументовано? Прочитай той файл.",
-    expectFilesRead: ["reviewer-core/insights/gotchas.md"],
+    expectFilesRead: ["reviewer-core/INSIGHTS.md"],
     maxTurns: 5,
   },
 
