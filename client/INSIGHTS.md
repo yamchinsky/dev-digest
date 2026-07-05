@@ -54,6 +54,11 @@ _2026-07-02_ · `client/src/app/skills/_components/SkillEditor/SkillEditor.tsx` 
 
 Strings that mirror what the LLM actually receives (e.g. the `## Project context` heading in the skill editor's SERIALIZES AS preview) are prompt-format constants, not UI copy — wrapping them in `t()` would let locales corrupt the depicted prompt slot. Only the surrounding labels ("SERIALIZES AS", captions) are translatable. When previewing prompt fragments in UI, keep the fragment verbatim and translate around it.
 
+### The vendored icon registry is a curated subset of lucide — grep `icons.tsx` before naming an icon
+_2026-07-05_ · `src/vendor/ui/icons.tsx` (~82 exported names)
+
+Icon names in `Button icon="…"` / `TABS` entries resolve against the vendored registry, NOT the full lucide catalogue: `PlusCircle` and `BarChart2` don't exist (`Plus` and `BarChart` do), and a wrong name fails at runtime, not typecheck-time in all call sites. Bit two SPEC-04 tasks independently. Before referencing any icon, grep `icons.tsx` for the exact export; extend the registry if the icon is genuinely missing.
+
 ## Tool & Library Notes
 
 ### Swapped inline-style variants must not mix a `border` shorthand with a `borderBottom` longhand
@@ -71,6 +76,21 @@ When a clickable wrapper `<button aria-label="…">` contains only `<SeverityBad
 
 > Updated 2026-06-28: the in-diff badge no longer uses `compact` — it renders a visible lowercase label ("blocker"/"warning"/"suggestion") next to the icon to match the design, so `getByRole("button", { name })` works again for it. The accessible-name-from-children quirk still applies to any *icon-only* button you build, so the lesson stands; it just no longer bites this specific badge.
 
+### TanStack Query v5 has no per-query `onSuccess` — status-transition side effects need a `useEffect` watching `query.data`
+_2026-07-05_ · `src/lib/hooks/evals.ts` (`useEvalBatch`)
+
+Reacting to a polled query's status flip (eval batch `running` → `done` must invalidate the history list) can't hook `onSuccess` — v5 removed it from `useQuery`. The sanctioned shape is a `useEffect` watching `query.data?.batch.status` that fires the invalidation once on transition. This is a legitimate external-side-effect `useEffect`, easy to misread as the "derived state in effects" anti-pattern — don't reflexively remove it in review.
+
+### `FormField` renders label and input unlinked — RTL `getByLabelText` can't find its children
+_2026-07-05_ · `src/vendor/ui/kit/FormField.tsx`
+
+`FormField` renders `<label>` without `htmlFor` and doesn't inject an `id` into the child input, so the accessible label↔control association never forms and `getByLabelText("Start line")` throws for FormField-wrapped inputs. Workarounds: put `aria-label` directly on the input, or query via `getByRole` with `name`. A global fix is extending FormField to accept/propagate `htmlFor`+`id` — until then, don't write `getByLabelText` against these fields.
+
+### Recharts `ResponsiveContainer` logs width(0)/height(0) to stderr in every jsdom chart test — cosmetic
+_2026-07-05_ · `EvalsTab.test.tsx` and any test rendering a `charts/` component
+
+jsdom has no layout engine, so `ResponsiveContainer` measures 0×0 and warns on every render; assertions still pass and the stubbed `ResizeObserver` in `src/test/setup.ts` doesn't silence it. Treat the warning as noise, not a broken test. The only real silencer is mocking `recharts` in test setup — do that only if the noise starts hiding real failures.
+
 ## Recurring Errors & Fixes
 
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages
@@ -85,6 +105,11 @@ _2026-07-03_ · `pulls/[number]/_components/DiffTab/DiffTab.tsx` (branch at `sma
 _2026-07-02_ · `src/app/agents/[id]/page.tsx:15` vs `_components/AgentEditor/constants.ts`, same pattern in `skills/_components/SkillsLab/SkillsLab.tsx:44`
 
 Tab state lives in `?tab=`, and the page validates the param against its own `VALID_TABS` array before passing it down — separate from the `TABS`/`TAB_DEFS` list that renders the tab bar. Adding a tab only to the render list produces a tab that LOOKS clickable but snaps back to `config`: the click writes `?tab=context` to the URL, the whitelist rejects it, and the fallback renders. No error, no console warning — bit us twice in SPEC-01 (agent Context tab shipped this way; the skills Context tab would have too if both spots in `SkillsLab.tsx` weren't updated together). When adding an editor tab, grep for `VALID_TABS` next to the page that owns the `?tab=` param.
+
+### A test that renders a component without `QueryClientProvider` breaks when ANY new hook is imported into that component
+_2026-07-05_ · `FindingsPanel.test.tsx` (`vi.mock("@/lib/hooks/evals", …)` beside the existing reviews mock)
+
+`FindingsPanel.test.tsx` wraps only `NextIntlClientProvider`, so every TanStack hook the component uses must be `vi.mock`ed or the render throws "No QueryClient set". Consequence: wiring one more hook into the panel (eval-case creation in SPEC-04) requires a matching mock in a test file the feature task doesn't own — an invisible cross-file dependency. When adding a hook to a widely-tested component, grep its test for the mock list; longer-term fix is a shared render helper with a real test QueryClient.
 
 ## Session Notes
 _None yet._

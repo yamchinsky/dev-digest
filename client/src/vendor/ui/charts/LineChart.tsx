@@ -7,6 +7,7 @@ import {
   YAxis,
   CartesianGrid,
   ResponsiveContainer,
+  Tooltip,
 } from "recharts";
 
 export interface ChartSeries {
@@ -21,12 +22,17 @@ export function LineChart({
   h = 200,
   yMin = 0.6,
   yMax = 1.0,
+  tooltipLabels,
 }: {
   series: ChartSeries[];
   w?: number;
   h?: number;
   yMin?: number;
   yMax?: number;
+  /** One label per data-point index. When provided, a Recharts Tooltip renders
+      the label for the hovered point. Absent → no tooltip (default, preserves
+      all existing LineChart consumers). */
+  tooltipLabels?: string[];
 }) {
   const n = series[0]?.data.length ?? 0;
   const rows = Array.from({ length: n }, (_, i) => {
@@ -50,6 +56,30 @@ export function LineChart({
             tickLine={false}
             width={38}
           />
+          {tooltipLabels && (
+            <Tooltip
+              content={({ active, label }: { active?: boolean; label?: unknown }) => {
+                if (!active || label === undefined || label === null) return null;
+                const text = tooltipLabels[Number(label)];
+                if (!text) return null;
+                return (
+                  <div
+                    style={{
+                      background: "var(--bg-elevated, #1a1a2e)",
+                      border: "1px solid var(--border, #333)",
+                      borderRadius: 6,
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      color: "var(--text-primary, #e2e8f0)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {text}
+                  </div>
+                );
+              }}
+            />
+          )}
           {series.map((s) => (
             <Line
               key={s.name}

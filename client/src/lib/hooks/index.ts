@@ -14,3 +14,4 @@ export * from "./blast";
 export * from "./context-docs";
 export * from "./onboarding-tour";
 export * from "./brief";
+export * from "./evals";

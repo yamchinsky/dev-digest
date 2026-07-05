@@ -79,6 +79,11 @@ _2026-07-02_ · `server/src/modules/agents/repository.ts` (`replaceContextDocs` 
 
 The delete-then-bulk-insert "replace" pattern must run inside one `db.transaction()` — `replaceContextDocs` (context docs) does this and is the first `db.transaction()` use in any repository. The older `setSkills` does two bare awaits (DELETE, then INSERT): a crash between them leaves the agent with zero skills. When touching `setSkills` next, wrap it in a transaction; when adding any new replace-style method, copy `replaceContextDocs`, not `setSkills`.
 
+### parseUnifiedDiff `newLineNumbers` covers context lines too — grounding accepts citations on unchanged lines inside a hunk
+_2026-07-05_ · `server/src/adapters/git/diff-parser.ts` (`hunk.newLineNumbers`)
+
+`newLineNumbers` accumulates ALL new-side lines a hunk covers (context included), not only `+` additions — and the citation-grounding gate validates `start_line/end_line` against that superset. So a finding citing an unchanged context line inside a hunk still survives grounding, and any "must the expectation hit a `+` line?" check (e.g. self-validating eval seed diffs) that intersects with `newLineNumbers` is deliberately looser than added-lines-only. Don't "tighten" it to `+`-only without changing the gate's semantics.
+
 ## Tool & Library Notes
 
 ### Drizzle `text('col', { enum: [...] })` is TypeScript-only — no SQL CHECK constraint is generated
@@ -95,6 +100,11 @@ Node's native glob (22+, still experimental in 23.x) is NOT `Promise<string[]>` 
 _2026-07-02_ · `server/src/modules/repos/repository.ts` (`getClonePathsByIds`)
 
 `inArray(col, [])` emits `WHERE id IN ()`, which PostgreSQL rejects at runtime (typecheck won't catch it). Every batch-lookup repository method must early-return on an empty id list: `if (ids.length === 0) return [];`. Easy to drop when copying the batch pattern to a new method.
+
+### TS2783 (field listed before a same-object spread) fails `tsc --noEmit` while vitest stays green
+_2026-07-05_ · `server/src/modules/eval/scoring.test.ts` (fixture helpers)
+
+Writing `{ file: 'a.ts', ...overrides }` where `overrides` may also carry `file` compiles under vitest's transform (esbuild strips types; later keys win at runtime) but `tsc --noEmit` rejects it with TS2783 "property specified more than once". A test suite can be fully green while the typecheck gate is red. In fixture builders, list defaults first and put the `...overrides` spread LAST, and never re-list a required field you're already spreading.
 
 ## Recurring Errors & Fixes
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
@@ -84,5 +85,53 @@ describe("FindingCard deep-link (targetFindingId)", () => {
     // Collapsed: the rationale body is not rendered.
     expect(screen.queryByText(/A.*Stripe key is committed/)).not.toBeInTheDocument();
     expect(scrollIntoViewMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("FindingCard — createEvalCase button", () => {
+  const ACCEPTED: FindingRecord = { ...FINDING, accepted_at: "2024-01-01T00:00:00Z" };
+  const DISMISSED: FindingRecord = { ...FINDING, dismissed_at: "2024-01-01T00:00:00Z" };
+
+  it("shows 'Create eval case' button for an accepted finding and fires the callback on click", async () => {
+    const user = userEvent.setup();
+    const onCreateEvalCase = vi.fn();
+    renderWithIntl(
+      <FindingCard
+        f={ACCEPTED}
+        defaultExpanded
+        onAction={() => {}}
+        onCreateEvalCase={onCreateEvalCase}
+      />,
+    );
+    const btn = screen.getByRole("button", { name: /create eval case/i });
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+    expect(onCreateEvalCase).toHaveBeenCalledOnce();
+  });
+
+  it("shows 'Create eval case' button for a dismissed finding", () => {
+    renderWithIntl(
+      <FindingCard
+        f={DISMISSED}
+        defaultExpanded
+        onAction={() => {}}
+        onCreateEvalCase={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /create eval case/i })).toBeInTheDocument();
+  });
+
+  it("does not show 'Create eval case' button for an undecided finding", () => {
+    renderWithIntl(
+      <FindingCard
+        f={FINDING}
+        defaultExpanded
+        onAction={() => {}}
+        onCreateEvalCase={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /create eval case/i }),
+    ).not.toBeInTheDocument();
   });
 });

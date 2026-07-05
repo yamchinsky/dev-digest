@@ -29,6 +29,7 @@ export function FindingCard({
   defaultExpanded,
   targetFindingId,
   onAction,
+  onCreateEvalCase,
   pending,
   repoFullName,
   headSha,
@@ -39,6 +40,9 @@ export function FindingCard({
   /** From ?findingId — when it matches this card, expand and scroll into view. */
   targetFindingId?: string | null;
   onAction?: (action: FindingActionKind, reply?: string) => void;
+  /** Called when the user wants to promote this finding to an eval case.
+   *  Only rendered when the finding is accepted or dismissed. */
+  onCreateEvalCase?: () => void;
   pending?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
@@ -120,6 +124,17 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            {(accepted || dismissed) && onCreateEvalCase && (
+              <Button
+                kind="ghost"
+                size="sm"
+                icon="Plus"
+                onClick={onCreateEvalCase}
+                aria-label={t("finding.createEvalCase")}
+              >
+                {t("finding.createEvalCase")}
+              </Button>
+            )}
           </div>
         </div>
       )}

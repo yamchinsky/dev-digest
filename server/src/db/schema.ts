@@ -36,7 +36,7 @@ import { agents, agentVersions, agentSkills, agentContextDocs } from './schema/a
 import { memory } from './schema/knowledge';
 import { conventions } from './schema/conventions';
 import { codeChunks, symbols, references, onboarding, onboardingTours } from './schema/context';
-import { evalCases, evalRuns, conformanceChecks, composedReviews } from './schema/eval';
+import { evalCases, evalRunBatches, evalRuns, conformanceChecks, composedReviews } from './schema/eval';
 import { ciInstallations, ciRuns } from './schema/ci';
 import { agentRuns, runTraces, multiAgentRuns } from './schema/runs';
 import { jobs, installedPlugins, digests } from './schema/ops';
@@ -77,6 +77,7 @@ export const schema = {
   onboarding,
   onboardingTours,
   evalCases,
+  evalRunBatches,
   evalRuns,
   conformanceChecks,
   composedReviews,

@@ -27,3 +27,4 @@ export * from './contracts/productionize.js';
 export * from './adapters.js';
 export * from './contracts/context-docs.js';
 export * from './contracts/onboarding-tour.js';
+export * from './contracts/eval-scoring.js';

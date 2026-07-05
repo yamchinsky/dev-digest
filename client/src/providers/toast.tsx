@@ -6,17 +6,25 @@
 import React from "react";
 
 type ToastKind = "success" | "error" | "info";
+
+/** Optional extras for a toast notification. Currently supports a navigation
+    href (AC-6) so success toasts can link the user to the relevant page. */
+export interface ToastOpts {
+  href?: string;
+}
+
 interface Toast {
   id: number;
   kind: ToastKind;
   message: string;
+  href?: string;
 }
 
 interface ToastApi {
-  toast: (message: string, kind?: ToastKind) => void;
-  success: (m: string) => void;
-  error: (m: string) => void;
-  info: (m: string) => void;
+  toast: (message: string, kind?: ToastKind, opts?: ToastOpts) => void;
+  success: (m: string, opts?: ToastOpts) => void;
+  error: (m: string, opts?: ToastOpts) => void;
+  info: (m: string, opts?: ToastOpts) => void;
 }
 
 const ToastCtx = React.createContext<ToastApi | null>(null);
@@ -29,13 +37,13 @@ export function useToast(): ToastApi {
 
 /* Module-level bridge so non-React code (e.g. the React Query cache) can raise
    toasts without the hook. The mounted <ToastProvider> registers its pusher. */
-type Pusher = (message: string, kind?: ToastKind) => void;
+type Pusher = (message: string, kind?: ToastKind, href?: string) => void;
 let activePusher: Pusher | null = null;
 export const notify = {
-  toast: (m: string, k?: ToastKind) => activePusher?.(m, k),
-  success: (m: string) => activePusher?.(m, "success"),
-  error: (m: string) => activePusher?.(m, "error"),
-  info: (m: string) => activePusher?.(m, "info"),
+  toast: (m: string, k?: ToastKind, opts?: ToastOpts) => activePusher?.(m, k, opts?.href),
+  success: (m: string, opts?: ToastOpts) => activePusher?.(m, "success", opts?.href),
+  error: (m: string, opts?: ToastOpts) => activePusher?.(m, "error", opts?.href),
+  info: (m: string, opts?: ToastOpts) => activePusher?.(m, "info", opts?.href),
 };
 
 const COLORS: Record<ToastKind, { bg: string; border: string; icon: string }> = {
@@ -59,14 +67,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
-  const push = React.useCallback((message: string, kind: ToastKind = "info") => {
-    const id = seq.current++;
-    setItems((prev) => [...prev, { id, kind, message }]);
-    timers.current.set(
-      id,
-      setTimeout(() => dismiss(id), 4000),
-    );
-  }, [dismiss]);
+  const push = React.useCallback(
+    (message: string, kind: ToastKind = "info", href?: string) => {
+      const id = seq.current++;
+      setItems((prev) => [...prev, { id, kind, message, href }]);
+      timers.current.set(
+        id,
+        setTimeout(() => dismiss(id), 4000),
+      );
+    },
+    [dismiss],
+  );
 
   // Clear any pending timers on unmount.
   React.useEffect(() => () => {
@@ -76,10 +87,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const api = React.useMemo<ToastApi>(
     () => ({
-      toast: push,
-      success: (m) => push(m, "success"),
-      error: (m) => push(m, "error"),
-      info: (m) => push(m, "info"),
+      toast: (m, k, opts) => push(m, k, opts?.href),
+      success: (m, opts) => push(m, "success", opts?.href),
+      error: (m, opts) => push(m, "error", opts?.href),
+      info: (m, opts) => push(m, "info", opts?.href),
     }),
     [push],
   );
@@ -129,7 +140,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               }}
             >
               <span style={{ color: c.border, fontWeight: 700 }}>{c.icon}</span>
-              <span style={{ flex: 1 }}>{t.message}</span>
+              <span style={{ flex: 1 }}>
+                {t.href ? (
+                  <a
+                    href={t.href}
+                    style={{ color: "inherit", textDecoration: "underline" }}
+                  >
+                    {t.message}
+                  </a>
+                ) : (
+                  t.message
+                )}
+              </span>
               <button
                 onClick={() => dismiss(t.id)}
                 style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16 }}

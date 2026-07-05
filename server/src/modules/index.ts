@@ -12,6 +12,8 @@ import conventions from './conventions/routes.js';
 import blast from './blast/routes.js';
 import onboardingTours from './onboarding-tours/routes.js';
 import brief from './brief/routes.js';
+// `eval` is a reserved word — import under an alias
+import eval_ from './eval/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -40,4 +42,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   blast,
   onboardingTours,
   brief,
+  eval: eval_,
 };
