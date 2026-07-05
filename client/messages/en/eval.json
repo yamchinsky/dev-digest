@@ -55,13 +55,23 @@
     "invalidJson": "invalid JSON",
     "lastRunPassed": "Last run passed",
     "lastRunFailed": "Last run failed",
-    "resultSummary": "recall {recall}% · precision {precision}% · citation {citation}% · {duration}s"
+    "resultSummary": "recall {recall}% · precision {precision}% · citation {citation}% · {duration}s",
+    "expectation": {
+      "type": "Type",
+      "file": "File",
+      "startLine": "Start line",
+      "endLine": "End line",
+      "note": "Note",
+      "mustFind": "must_find",
+      "mustNotFlag": "must_not_flag"
+    }
   },
   "evalsTab": {
     "metricsTitle": "Eval metrics",
     "metricsSubtitle": "Recall / Precision / Citation for this agent's eval cases",
     "casesHeading": "Eval cases",
     "newCase": "New case",
+    "newCaseLink": "New case",
     "loadingCases": "Loading cases…",
     "emptyCases": "No eval cases yet. Create one to assert this agent's expected findings on a sample diff.",
     "neverRun": "never run",
@@ -71,7 +81,32 @@
     "run": "Run",
     "running": "Running…",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "runAll": "Run eval ({count})",
+    "caseCreated": "Case created",
+    "history": {
+      "title": "Run history",
+      "ranAt": "Ran at",
+      "version": "Version",
+      "model": "Model",
+      "recall": "Recall",
+      "precision": "Precision",
+      "citation": "Citation",
+      "cost": "Cost",
+      "status": "Status",
+      "compare": "Compare",
+      "selectTwo": "Select 2 done runs to compare"
+    }
+  },
+  "compare": {
+    "title": "Compare runs",
+    "baseline": "Baseline (A)",
+    "candidate": "Candidate (B)",
+    "delta": "Δ (B − A)",
+    "flipTable": "Per-case flips",
+    "caseName": "Case",
+    "close": "Close",
+    "noFlips": "No per-case flips between these two runs."
   },
   "page": {
     "crumbSkillsLab": "Skills Lab",
