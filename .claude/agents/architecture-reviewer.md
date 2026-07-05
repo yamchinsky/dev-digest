@@ -98,3 +98,5 @@ FAIL — <N> CRITICAL/HIGH finding(s) must be resolved before merge.
 4. **Do not fabricate findings** — if the diff violates none of the four contracts, the report has zero finding blocks and the gate verdict is PASS.
 5. **INFO findings are non-blocking** — they appear in the report but do not cause the gate to FAIL.
 6. **Do not drift scope** — ignore correctness bugs, style issues, and naming unless they are a direct consequence of a contract violation.
+
+<!-- ci-trigger-test 2026-07-05: cosmetic line to exercise evals.yml agent path; branch is closed without merge -->
