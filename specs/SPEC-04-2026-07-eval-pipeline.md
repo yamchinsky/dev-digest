@@ -1,4 +1,4 @@
-# Spec: Eval Pipeline  |  Spec ID: SPEC-04  |  Status: approved
+# Spec: Eval Pipeline  |  Spec ID: SPEC-04  |  Status: implemented
 Supersedes: —
 Modules: server, client, reviewer-core, shared
 

@@ -83,7 +83,11 @@ _2026-07-05_ · `evals/src/delta.ts` (`repo-wide` tooling)
 `eval:delta` showed overall 100% → 50% (Δ −50) while every individual practice was 100% → 100% (Δ 0). This is not a bug: the overall rate counts runs where the **grounding check failed** as case-failures, but those runs produce no per-practice data — so per-practice averages are computed only over the subset of grounding-passing runs and look fine. With n=2 a single grounding failure accounts for −50 overall. Root cause here: the grounding strings were file-path fragments (`agents/repository`) — the model paraphrased instead of quoting the path verbatim, failing the substring check. Use class names (`AgentsRepository`) rather than path segments as grounding strings; they survive paraphrase. When you see a delta with a large overall drop but zero per-practice movement, check how many runs passed grounding before concluding the skill regressed.
 
 ## Codebase Patterns
-_None yet._
+
+### The `Provider` contract lives in `contracts/knowledge.ts`, not `contracts/platform.ts`
+_2026-07-05_ · `server/src/vendor/shared/contracts/knowledge.ts` + the byte-identical client mirror
+
+New shared-contract files that need the `Provider` Zod enum must import it from `./knowledge.js` — `platform.ts` itself re-imports it from there, so the "obvious" `./platform.js` import is wrong in both vendor trees. Bit the eval-scoring contract (SPEC-04): the plan template said `platform.js` and the implementer had to correct it. When adding a contract, grep the barrel for where a symbol is DEFINED, not where it plausibly belongs.
 
 ## Tool & Library Notes
 

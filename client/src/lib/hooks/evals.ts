@@ -114,7 +114,7 @@ export function useCreateEvalCaseFromFinding() {
     mutationFn: ({ findingId, agentId }: CreateEvalCaseFromFindingInput) =>
       api.post<EvalCase>(
         `/findings/${findingId}/eval-case`,
-        agentId ? { agentId } : undefined,
+        agentId ? { agent_id: agentId } : undefined,
       ),
     onSuccess: (evalCase) => {
       qc.invalidateQueries({ queryKey: evalCasesKey(evalCase.owner_id) });
