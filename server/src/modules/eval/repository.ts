@@ -129,6 +129,40 @@ export class EvalRepository {
     return row!;
   }
 
+  /** Idempotent insert for one-click "turn into eval case": on a
+   *  (workspace, owner, name) unique conflict, return the EXISTING case
+   *  instead of throwing — so clicking the button twice on the same finding
+   *  is a no-op returning the same case, not a 500. */
+  async insertCaseFromFinding(data: InsertCase): Promise<EvalCaseRow> {
+    const [row] = await this.db
+      .insert(t.evalCases)
+      .values({
+        workspaceId: data.workspaceId,
+        ownerKind: data.ownerKind,
+        ownerId: data.ownerId,
+        name: data.name,
+        inputDiff: data.inputDiff,
+        inputFiles: data.inputFiles as object | undefined,
+        inputMeta: data.inputMeta as object | undefined,
+        expectedOutput: data.expectedOutput as object,
+        notes: data.notes,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (row) return row;
+    const [existing] = await this.db
+      .select()
+      .from(t.evalCases)
+      .where(
+        and(
+          eq(t.evalCases.workspaceId, data.workspaceId),
+          eq(t.evalCases.ownerId, data.ownerId),
+          eq(t.evalCases.name, data.name),
+        ),
+      );
+    return existing!;
+  }
+
   async updateCase(
     workspaceId: string,
     id: string,

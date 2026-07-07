@@ -182,8 +182,10 @@ export class EvalService {
       },
     };
 
-    // 7. Persist the case
-    const row = await this.repo.insertCase({
+    // 7. Persist the case — idempotent: clicking "turn into eval case" twice on
+    // the same finding returns the existing case instead of a 500 on the
+    // (workspace, owner, name) unique index.
+    const row = await this.repo.insertCaseFromFinding({
       workspaceId,
       ownerKind: 'agent',
       ownerId: agentId,
