@@ -133,11 +133,17 @@ export function useCreateEvalCaseFromFinding() {
 // Batch runs
 // ---------------------------------------------------------------------------
 
-/** GET /agents/:id/eval-runs → EvalBatch[] */
+/** GET /agents/:id/eval-runs → EvalBatch[].
+    Self-polls every 2 500 ms while ANY batch in the list is still 'running',
+    and stops once none are — so the Recent Runs table and the "Run eval"
+    button flip from running → done without a manual refresh. (A batch runs
+    fire-and-forget server-side, so nothing else pushes the completion.) */
 export function useEvalBatches(agentId: string) {
   return useQuery({
     queryKey: evalBatchesKey(agentId),
     queryFn: () => api.get<EvalBatch[]>(`/agents/${agentId}/eval-runs`),
+    refetchInterval: (q) =>
+      (q.state.data ?? []).some((b) => b.status === "running") ? 2500 : false,
   });
 }
 
