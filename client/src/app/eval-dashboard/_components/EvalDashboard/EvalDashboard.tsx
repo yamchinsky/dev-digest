@@ -20,6 +20,7 @@ import {
   useEvalBatches,
   useEvalCases,
   useStartEvalBatch,
+  useFirstAgentWithCases,
 } from "@/lib/hooks/evals";
 import { MetricCardsRow } from "@/components/evals/MetricCardsRow";
 import { TrendChart } from "@/components/evals/TrendChart";
@@ -38,9 +39,17 @@ export function EvalDashboard() {
     string | undefined
   >(undefined);
 
-  // Derive the effective agent: explicit pick → first agent → empty fallback.
+  // Derive the effective agent: explicit pick → first agent WITH eval cases →
+  // first agent → empty fallback. Defaulting to the first agent-with-cases
+  // (not just agents[0]) keeps the dashboard on an agent that has data across
+  // reloads, instead of snapping back to an empty agent.
+  const agentIds = React.useMemo(
+    () => (agents ?? []).map((a) => a.id),
+    [agents],
+  );
+  const firstWithCases = useFirstAgentWithCases(agentIds);
   const effectiveAgentId =
-    selectedAgentId ?? agents?.[0]?.id ?? "";
+    selectedAgentId ?? firstWithCases ?? agents?.[0]?.id ?? "";
   const selectedAgent = agents?.find((a) => a.id === effectiveAgentId);
 
   // ── Eval data ──────────────────────────────────────────────────────────
