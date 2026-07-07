@@ -103,7 +103,7 @@ describe("FindingCard — createEvalCase button", () => {
         onCreateEvalCase={onCreateEvalCase}
       />,
     );
-    const btn = screen.getByRole("button", { name: /create eval case/i });
+    const btn = screen.getByRole("button", { name: /turn into eval case/i });
     expect(btn).toBeInTheDocument();
     await user.click(btn);
     expect(onCreateEvalCase).toHaveBeenCalledOnce();
@@ -118,7 +118,7 @@ describe("FindingCard — createEvalCase button", () => {
         onCreateEvalCase={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: /create eval case/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /turn into eval case/i })).toBeInTheDocument();
   });
 
   it("does not show 'Create eval case' button for an undecided finding", () => {
@@ -131,7 +131,7 @@ describe("FindingCard — createEvalCase button", () => {
       />,
     );
     expect(
-      screen.queryByRole("button", { name: /create eval case/i }),
+      screen.queryByRole("button", { name: /turn into eval case/i }),
     ).not.toBeInTheDocument();
   });
 });

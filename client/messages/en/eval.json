@@ -28,7 +28,8 @@
       "cost": "Cost"
     },
     "pass": "pass",
-    "fail": "fail"
+    "fail": "fail",
+    "alertPrecisionDip": "Precision dipped {pts}pts on v{version} — a new false positive slipped in."
   },
   "caseEditor": {
     "newCase": "New eval case",

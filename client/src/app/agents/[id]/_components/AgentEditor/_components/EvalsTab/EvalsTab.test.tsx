@@ -85,7 +85,7 @@ vi.mock("@/lib/hooks/evals", () => ({
 // Import AFTER mock (vi.mock is hoisted, but the import below must come after
 // the mock call in source order so the factory runs first).
 import { EvalsTab } from "./EvalsTab";
-import { buildTooltipLabels } from "./TrendChart";
+import { buildTooltipLabels } from "@/components/evals/TrendChart";
 
 // ---------------------------------------------------------------------------
 // Fixtures

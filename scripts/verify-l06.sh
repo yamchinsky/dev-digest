@@ -29,6 +29,7 @@ ok()   { printf '\033[1;32m✔ %s\033[0m\n' "$*"; }
 # ---------------------------------------------------------------------------
 # Spec existence check
 # ---------------------------------------------------------------------------
+test -f specs/eval-pipeline.md || fail "specs/eval-pipeline.md not found"
 test -f specs/SPEC-04-2026-07-eval-pipeline.md || fail "SPEC-04 file not found"
 
 # ---------------------------------------------------------------------------
@@ -82,6 +83,8 @@ pnpm -C client exec vitest run \
   'src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab' \
   'src/app/agents/[id]/eval-cases' \
   'src/app/repos/[repoId]/pulls/[number]/_components/FindingCard' \
+  'src/app/eval-dashboard' \
+  'src/components/evals' \
   || fail "client eval tests"
 ok "client eval tests passed"
 

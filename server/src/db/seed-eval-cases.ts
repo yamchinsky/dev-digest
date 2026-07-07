@@ -111,6 +111,81 @@ index 4e5f6a7..2b3c8d9 100644
  ## Getting Started`;
 
 /**
+ * Case: missing-await-async
+ * File: src/api/payments.ts — chargeCard() called without await; result
+ * immediately used as if resolved. New-side lines 17–18.
+ *
+ * @@ -14,6 +14,8 @@
+ *   old: 6 lines (3 ctx + 3 ctx, no deletions)
+ *   new: 8 lines (3 ctx + 2 added + 3 ctx)
+ * Added lines → new-side lines 17–18.
+ */
+const MISSING_AWAIT_ASYNC_DIFF = `diff --git a/src/api/payments.ts b/src/api/payments.ts
+index 5a1b2c3..7d4e5f6 100644
+--- a/src/api/payments.ts
++++ b/src/api/payments.ts
+@@ -14,6 +14,8 @@
+ async function processPayment(amount: number, customerId: string) {
+   const customer = await getCustomer(customerId);
+   const invoice = await createInvoice(customer, amount);
++  const res = chargeCard(customer.paymentMethodId, invoice.total);
++  await recordTransaction({ chargeId: res.id, invoiceId: invoice.id });
+   return { success: true, invoiceId: invoice.id };
+ }
+ `;
+
+/**
+ * Case: sql-string-concat
+ * File: src/db/queries.ts — new query function builds SQL via string
+ * concatenation with a request param (SQL injection smell). New-side lines 11–13.
+ *
+ * @@ -8,6 +8,9 @@
+ *   old: 6 lines (3 ctx + 3 ctx, no deletions)
+ *   new: 9 lines (3 ctx + 3 added + 3 ctx)
+ * Added lines → new-side lines 11–13 (injection on line 12).
+ */
+const SQL_STRING_CONCAT_DIFF = `diff --git a/src/db/queries.ts b/src/db/queries.ts
+index 1a2b3c4..5d6e7f8 100644
+--- a/src/db/queries.ts
++++ b/src/db/queries.ts
+@@ -8,6 +8,9 @@
+   const result = await db.query('SELECT * FROM payments WHERE id = $1', [id]);
+   return result.rows[0] ?? null;
+ }
++export async function getPaymentsByNote(db: Pool, req: Request) {
++  const result = await db.query('SELECT * FROM payments WHERE note = ' + req.query.note);
++}
+
+ export async function getPaymentsByStatus(db: Pool, status: string) {
+   const result = await db.query('SELECT * FROM payments WHERE status = $1', [status]);`;
+
+/**
+ * Case: whitespace-format-noise
+ * File: src/utils/format.ts — pure indentation fix (4-space → 2-space) with
+ * zero logic change. New-side lines 8–9.
+ *
+ * @@ -5,8 +5,8 @@
+ *   old: 8 lines (3 ctx + 2 deleted + 3 ctx)
+ *   new: 8 lines (3 ctx + 2 added + 3 ctx)
+ * Added lines → new-side lines 8–9.
+ */
+const WHITESPACE_FORMAT_NOISE_DIFF = `diff --git a/src/utils/format.ts b/src/utils/format.ts
+index 2c3d4e5..6f7a8b9 100644
+--- a/src/utils/format.ts
++++ b/src/utils/format.ts
+@@ -5,8 +5,8 @@
+ const LOCALE = 'en-US';
+
+ function pad(n: number): string {
+-    if (n < 10) { return '0' + n; }
+-    return String(n);
++  if (n < 10) { return '0' + n; }
++  return String(n);
+ }
+
+ export function formatDate(date: Date): string {`;
+
+/**
  * Case: safe-var-rename
  * File: src/utils/helpers.ts — local variable rename, all usages updated,
  * zero logic change. New-side lines 17–18.
@@ -141,7 +216,7 @@ index 7c8d9e0..1f2a3b4 100644
 // ---------------------------------------------------------------------------
 
 /**
- * Idempotently inserts five eval cases for the General Reviewer agent,
+ * Idempotently inserts eight eval cases for the General Reviewer agent,
  * themed on demo PR #482 (acme/payments-api).
  *
  * If the default workspace or the General Reviewer agent does not yet exist
@@ -166,7 +241,7 @@ export async function seedEvalCases(db: Db): Promise<void> {
     .where(and(eq(t.agents.workspaceId, ws.id), eq(t.agents.name, 'General Reviewer')));
   if (!agent) return; // agent not seeded yet
 
-  // ---- 3. insert five cases (idempotent) ----
+  // ---- 3. insert eight cases (idempotent) ----
   const prMeta = { pr_number: 482, repo: 'acme/payments-api' };
 
   await db
@@ -242,7 +317,76 @@ export async function seedEvalCases(db: Db): Promise<void> {
           '(entry.count = MAX_REQUESTS instead of entry.count <= MAX_REQUESTS) that ' +
           'makes the rate-limit guard always trigger regardless of actual count.',
       },
+      {
+        workspaceId: ws.id,
+        ownerKind: 'agent' as const,
+        ownerId: agent.id,
+        name: 'missing-await-async',
+        inputDiff: MISSING_AWAIT_ASYNC_DIFF,
+        inputMeta: {
+          title: 'Add rate limiting to public API endpoints',
+          body: 'Extends processPayment to charge the card and record the transaction.',
+          source: prMeta,
+        },
+        expectedOutput: {
+          type: 'must_find',
+          file: 'src/api/payments.ts',
+          start_line: 17,
+          end_line: 17,
+          note: 'chargeCard() called without await — res is a Promise, res.id is undefined',
+        },
+        notes:
+          'Validates detection of a missing await on an async call: chargeCard() returns ' +
+          'a Promise but is assigned without await, so res.id resolves to undefined and ' +
+          'the recordTransaction call silently stores a null chargeId.',
+      },
+      {
+        workspaceId: ws.id,
+        ownerKind: 'agent' as const,
+        ownerId: agent.id,
+        name: 'sql-string-concat',
+        inputDiff: SQL_STRING_CONCAT_DIFF,
+        inputMeta: {
+          title: 'Add rate limiting to public API endpoints',
+          body: 'Adds getPaymentsByNote query helper for searching by memo field.',
+          source: prMeta,
+        },
+        expectedOutput: {
+          type: 'must_find',
+          file: 'src/db/queries.ts',
+          start_line: 12,
+          end_line: 12,
+          note: 'SQL built via string concatenation with req.query.note — SQL injection risk',
+        },
+        notes:
+          'Validates detection of SQL injection: getPaymentsByNote() builds a raw query ' +
+          'by concatenating req.query.note directly into the SQL string instead of using ' +
+          'a parameterised placeholder, exposing the DB to arbitrary SQL from the request.',
+      },
       // ------------------------------------------------------------------ must_not_flag cases
+      {
+        workspaceId: ws.id,
+        ownerKind: 'agent' as const,
+        ownerId: agent.id,
+        name: 'whitespace-format-noise',
+        inputDiff: WHITESPACE_FORMAT_NOISE_DIFF,
+        inputMeta: {
+          title: 'Add rate limiting to public API endpoints',
+          body: 'Fix indentation in pad() helper to match project style guide (2-space).',
+          source: prMeta,
+        },
+        expectedOutput: {
+          type: 'must_not_flag',
+          file: 'src/utils/format.ts',
+          start_line: 8,
+          end_line: 9,
+          note: 'Pure indentation change (4→2 spaces) with zero logic change — must produce zero findings',
+        },
+        notes:
+          'Validates precision: a mechanical reindentation of the pad() helper body ' +
+          '(4-space to 2-space) with no logic change must not trigger any finding. ' +
+          'Flagging pure formatting changes is a false positive that erodes developer trust.',
+      },
       {
         workspaceId: ws.id,
         ownerKind: 'agent' as const,
