@@ -85,6 +85,7 @@ pnpm -C client exec vitest run \
   'src/app/repos/[repoId]/pulls/[number]/_components/FindingCard' \
   'src/app/eval-dashboard' \
   'src/components/evals' \
+  'src/lib/hooks/evals.test.ts' \
   || fail "client eval tests"
 ok "client eval tests passed"
 

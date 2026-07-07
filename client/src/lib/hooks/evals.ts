@@ -112,9 +112,12 @@ export function useCreateEvalCaseFromFinding() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ findingId, agentId }: CreateEvalCaseFromFindingInput) =>
+      // Always send an object body: the route's body schema is
+      // z.object({ agent_id? }), and Fastify rejects an undefined body against
+      // an object schema with a 422 — even though every field is optional.
       api.post<EvalCase>(
         `/findings/${findingId}/eval-case`,
-        agentId ? { agent_id: agentId } : undefined,
+        agentId ? { agent_id: agentId } : {},
       ),
     onSuccess: (evalCase) => {
       qc.invalidateQueries({ queryKey: evalCasesKey(evalCase.owner_id) });
