@@ -4,12 +4,12 @@
  * Requires Docker (testcontainers Postgres). Skips cleanly when Docker is absent.
  *
  * Assertions:
- *  1. After two calls to seedEvalCases() exactly five eval_cases rows exist
+ *  1. After two calls to seedEvalCases() exactly eight eval_cases rows exist
  *     for the General Reviewer owner (idempotency via onConflictDoNothing).
  *  2. Every seeded row has a non-empty inputDiff.
  *  3. Every inputDiff parses via parseUnifiedDiff with at least one file and
  *     at least one non-empty hunk (structural correctness).
- *  4. For each of the three must_find cases the expectedOutput start_line /
+ *  4. For each of the five must_find cases the expectedOutput start_line /
  *     end_line range intersects the new-side line numbers of the corresponding
  *     file's first hunk — i.e. the expectation points at real new-side lines
  *     (grounding-gate self-validation).
@@ -67,7 +67,7 @@ d('seedEvalCases', () => {
     await pg?.stop();
   });
 
-  it('inserts exactly five eval_cases rows for the General Reviewer and each has a non-empty inputDiff', async () => {
+  it('inserts exactly eight eval_cases rows for the General Reviewer and each has a non-empty inputDiff', async () => {
     const db = pg.handle.db;
 
     // Resolve General Reviewer agent
@@ -85,8 +85,8 @@ d('seedEvalCases', () => {
       .from(t.evalCases)
       .where(eq(t.evalCases.ownerId, agent!.id));
 
-    // Exactly five rows — no duplicates from the second seedEvalCases() call
-    expect(rows).toHaveLength(5);
+    // Exactly eight rows — no duplicates from the second seedEvalCases() call
+    expect(rows).toHaveLength(8);
 
     for (const row of rows) {
       expect(row.inputDiff, `case '${row.name}' must have a non-empty inputDiff`).toBeTruthy();
@@ -175,8 +175,8 @@ d('seedEvalCases', () => {
       return exp.success && exp.data.type === 'must_find';
     });
 
-    // We seeded exactly three must_find cases
-    expect(mustFindCases).toHaveLength(3);
+    // We seeded exactly five must_find cases
+    expect(mustFindCases).toHaveLength(5);
 
     for (const row of mustFindCases) {
       const exp = EvalExpectation.parse(row.expectedOutput);

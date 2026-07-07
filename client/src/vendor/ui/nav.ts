@@ -33,6 +33,7 @@ export const NAV: NavGroup[] = [
     section: "SKILLS LAB",
     items: [
       { key: "skills", label: "Skills", icon: "Sparkles", href: "/skills", gKey: "k" },
+      { key: "eval-dashboard", label: "Eval Dashboard", icon: "Gauge", href: "/eval-dashboard", gKey: "e" },
     ],
   },
 ];
@@ -65,6 +66,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: "g k", label: "Go to Skills", group: "Navigation" },
   { keys: "g a", label: "Go to Agents", group: "Navigation" },
   { keys: "g x", label: "Go to Project Context", group: "Navigation" },
+  { keys: "g e", label: "Go to Eval Dashboard", group: "Navigation" },
   { keys: "j / k", label: "Next / previous finding", group: "Findings" },
   { keys: "a", label: "Accept finding", group: "Findings" },
   { keys: "d", label: "Dismiss finding", group: "Findings" },

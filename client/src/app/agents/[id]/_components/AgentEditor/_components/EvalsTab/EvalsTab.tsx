@@ -12,23 +12,19 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, MetricCard, Skeleton } from "@devdigest/ui";
+import { Button, Skeleton } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
 import {
   useEvalBatches,
   useEvalBatch,
   useStartEvalBatch,
 } from "@/lib/hooks/evals";
-import { TrendChart } from "./TrendChart";
+import { MetricCardsRow } from "@/components/evals/MetricCardsRow";
+import { TrendChart } from "@/components/evals/TrendChart";
+import { RunHistory } from "@/components/evals/RunHistory";
+import { CompareView } from "@/components/evals/CompareView";
 import { CasesList } from "./CasesList";
-import { RunHistory } from "./RunHistory";
-import { CompareView } from "./CompareView";
 import { s } from "./styles";
-
-function fmtMetric(v: number | null): string {
-  if (v === null || v === undefined) return "—";
-  return `${(v * 100).toFixed(1)}%`;
-}
 
 export function EvalsTab({ agent }: { agent: Agent }) {
   const t = useTranslations("eval");
@@ -94,39 +90,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
   return (
     <div style={s.wrap}>
       {/* 1. Metric cards */}
-      <div style={s.metricsRow}>
-        <MetricCard
-          label={t("dashboard.metrics.recall")}
-          value={fmtMetric(latestDone?.recall ?? null)}
-          delta={
-            latestDone?.recall != null && prevDone?.recall != null
-              ? latestDone.recall - prevDone.recall
-              : undefined
-          }
-          color="#22c55e"
-        />
-        <MetricCard
-          label={t("dashboard.metrics.precision")}
-          value={fmtMetric(latestDone?.precision ?? null)}
-          delta={
-            latestDone?.precision != null && prevDone?.precision != null
-              ? latestDone.precision - prevDone.precision
-              : undefined
-          }
-          color="#6366f1"
-        />
-        <MetricCard
-          label={t("dashboard.metrics.citationAccuracy")}
-          value={fmtMetric(latestDone?.citation_accuracy ?? null)}
-          delta={
-            latestDone?.citation_accuracy != null &&
-            prevDone?.citation_accuracy != null
-              ? latestDone.citation_accuracy - prevDone.citation_accuracy
-              : undefined
-          }
-          color="#f59e0b"
-        />
-      </div>
+      <MetricCardsRow latestDone={latestDone} prevDone={prevDone} />
 
       {/* 2. Trend chart (AC-25: only when ≥1 done batch) */}
       <TrendChart doneBatches={doneBatches} />
