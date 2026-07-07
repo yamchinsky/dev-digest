@@ -373,6 +373,48 @@ d('EvalService integration (Docker required)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Idempotency: clicking "turn into eval case" twice on the same finding must
+  // return the same case, not a 500 on the (workspace, owner, name) unique index.
+  // -------------------------------------------------------------------------
+  it('POST /findings/:id/eval-case is idempotent — second call returns the same case, not 500', async () => {
+    const [review] = await pg.handle.db
+      .insert(t.reviews)
+      .values({ workspaceId, prId, kind: 'review', agentId, verdict: 'comment', summary: 'test' })
+      .returning();
+
+    const [finding] = await pg.handle.db
+      .insert(t.findings)
+      .values({
+        reviewId: review!.id,
+        file: 'src/dup.ts',
+        startLine: 5,
+        endLine: 5,
+        severity: 'WARNING',
+        category: 'bug',
+        title: 'idempotent one-click finding',
+        rationale: 'test rationale',
+        confidence: 0.9,
+        acceptedAt: new Date(),
+      })
+      .returning();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: `/findings/${finding!.id}/eval-case`,
+      payload: {},
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: `/findings/${finding!.id}/eval-case`,
+      payload: {},
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    expect(second.json().id).toBe(first.json().id);
+  });
+
+  // -------------------------------------------------------------------------
   // AC-2: dismissed finding → must_not_flag expectation
   // -------------------------------------------------------------------------
   it('AC-2: POST /findings/:id/eval-case with dismissed finding creates must_not_flag case', async () => {
