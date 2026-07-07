@@ -58,6 +58,7 @@ vi.mock("@/lib/hooks/agents", () => ({
 vi.mock("@/lib/hooks/evals", () => ({
   useEvalBatches: (_id: string) => ({ ...hooksState.useEvalBatches }),
   useEvalCases: (_id: string) => ({ ...hooksState.useEvalCases }),
+  useFirstAgentWithCases: (ids: string[]) => ids[0],
   useEvalBatch: (id: string | undefined) => ({
     data: id ? hooksState.batchDetails.get(id) : undefined,
     isLoading: false,

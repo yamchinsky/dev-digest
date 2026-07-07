@@ -3,7 +3,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueries,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { api } from "@/services/api";
 import { notify } from "@/providers/toast";
 import type {
@@ -35,6 +40,21 @@ export function useEvalCases(agentId: string) {
     queryKey: evalCasesKey(agentId),
     queryFn: () => api.get<EvalCase[]>(`/agents/${agentId}/eval-cases`),
   });
+}
+
+/** Returns the first agent id (in the given order) that has ≥1 eval case.
+    Used by the Eval Dashboard to default to an agent that actually has data
+    instead of the first agent in the list (which may have no cases). Reuses
+    the per-agent eval-cases cache, so the selected agent isn't fetched twice. */
+export function useFirstAgentWithCases(agentIds: string[]): string | undefined {
+  const results = useQueries({
+    queries: agentIds.map((id) => ({
+      queryKey: evalCasesKey(id),
+      queryFn: () => api.get<EvalCase[]>(`/agents/${id}/eval-cases`),
+    })),
+  });
+  const idx = results.findIndex((r) => (r.data?.length ?? 0) > 0);
+  return idx >= 0 ? agentIds[idx] : undefined;
 }
 
 /** GET /eval-cases/:id → EvalCase */
