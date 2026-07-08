@@ -59,6 +59,7 @@ ok "reviewer-core build passed"
 log "Step 4/6 — scoring unit tests"
 pnpm -C server exec vitest run \
   src/modules/eval/scoring.test.ts \
+  src/modules/skill-eval/scoring.test.ts \
   || fail "scoring unit tests"
 ok "scoring unit tests passed"
 
@@ -84,6 +85,7 @@ pnpm -C client exec vitest run \
   'src/app/agents/[id]/eval-cases' \
   'src/app/repos/[repoId]/pulls/[number]/_components/FindingCard' \
   'src/app/eval-dashboard' \
+  'src/app/skills/_components/SkillDetail/EvalsTab' \
   'src/components/evals' \
   'src/lib/hooks/evals.test.ts' \
   || fail "client eval tests"

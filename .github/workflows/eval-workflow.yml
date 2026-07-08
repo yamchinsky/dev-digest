@@ -1,0 +1,93 @@
+# eval · workflow (trace) — WORKFLOW/systemic tier.
+#
+# Systemic tier: real CLAUDE.md + skills + agent registry loaded from disk
+# (settingSources: ["project"]). Verifies dispatch, activation, and read-when
+# behaviour — the things the content tier deliberately can't see (it runs
+# isolated per-skill/per-agent without loading the full CLAUDE.md).
+#
+# Uses OpenRouter through the repo's LiteLLM proxy (evals/proxy/).
+# Per-tier model from the verified table in evals/README.md:
+#   workflow (dispatch assertions) → google/gemini-2.5-flash
+#     (the ONLY verified model that actually dispatches subagents;
+#      deepseek/gpt-4.1-mini do the work inline instead of dispatching)
+#
+# Switch WITHOUT editing this file via repository variables
+# (Settings → Secrets and variables → Actions → Variables): EVAL_WORKFLOW_MODEL.
+#
+# COST/FLAKINESS: LLM-judged evals are probabilistic — do NOT mark these jobs
+# as required checks until a few weeks of pass-rate history exists. A red job
+# here is a signal to read the trace, not an automatic revert.
+#
+# This file does NOT need a `detect` job: the path trigger already scopes
+# exactly which changes are worth running the workflow tier. On workflow_dispatch
+# a full run happens unconditionally.
+name: eval · workflow (trace)
+
+on:
+  pull_request:
+    paths:
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - '.claude/agents/**'
+      - 'evals/workflow/**'
+      - 'evals/src/**'
+      - 'evals/proxy/**'
+      - 'evals/package.json'
+      - 'evals/pnpm-lock.yaml'
+      - '.github/workflows/eval-workflow.yml'
+  # Manual run (e.g. after changing the model variable or CLAUDE.md).
+  workflow_dispatch:
+    inputs:
+      workflow_model:
+        description: 'OpenRouter slug for the workflow tier (overrides vars.EVAL_WORKFLOW_MODEL)'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-workflow-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EVAL_BACKEND: openrouter
+  EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL || 'google/gemini-2.5-flash' }}
+  # Points at the LiteLLM proxy started inside each job (evals/proxy/).
+  OPENROUTER_BASE_URL: http://localhost:4000
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+jobs:
+  workflow-evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Dispatch assertions pass ONLY on Gemini Flash (evals/README.md verified
+      # table): deepseek/gpt-4.1-mini do the work inline instead of dispatching.
+      EVAL_MODEL: ${{ inputs.workflow_model || vars.EVAL_WORKFLOW_MODEL || 'google/gemini-2.5-flash' }}
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require OPENROUTER_API_KEY secret
+        run: |
+          [ -n "$OPENROUTER_API_KEY" ] || { echo "::error::OPENROUTER_API_KEY secret is not set (Settings → Secrets → Actions)"; exit 1; }
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: evals/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start LiteLLM proxy
+        run: scripts/litellm-proxy.sh up
+
+      - name: Workflow-tier evals
+        run: pnpm eval:workflow

@@ -142,6 +142,11 @@ _2026-06-20_ · `.claude/settings.json` (`repo-wide` tooling)
 
 Claude Code reads `.claude/settings.json` (project) and `~/.claude/settings.json` (user) once at session boot and caches them for the lifetime of the session. Edits to hook commands, permissions, env vars, or model don't propagate to the running session — and `/clear` doesn't reload settings, it only resets conversation context. Symptom: a hook fires with text/behavior that doesn't match what's on disk (e.g. a phantom "Failed with non-blocking status code" from a buggy command you already replaced). Diagnose by comparing the hook payload in the system-reminder to `cat .claude/settings.json`; if they differ, you're on cached config. Fix is a full exit + relaunch of Claude Code.
 
+### Running `pnpm <script>` at the repo ROOT mutates root `package.json` + drops a stray root lockfile
+_2026-07-09_ · `package.json` (`repo-wide` — the root `verify:l06` script)
+
+The repo root has a minimal `package.json` (just the `verify:l06` script) but is NOT a pnpm workspace. Invoking `pnpm verify:l06` (or any `pnpm` command) from root makes pnpm "adopt" that package.json: it injects a `"packageManager": "pnpm@…"` field into it AND writes a stray root `pnpm-lock.yaml` — both unintended, both pollute the diff, and the packageManager edit silently rides along in a later `git add`. Run the gate as `bash scripts/verify-l06.sh` (or `pnpm -C server verify:l06`) instead of `pnpm verify:l06` at root. If you already dirtied it: `git checkout HEAD -- package.json && rm -f pnpm-lock.yaml`.
+
 ## Recurring Errors & Fixes
 
 ### `git add <file> && git commit --amend` commits the ENTIRE index — pre-staged files from another terminal ride along

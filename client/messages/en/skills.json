@@ -107,5 +107,31 @@
     "serializesAs": "SERIALIZES AS",
     "previewShow": "Show preview",
     "previewHide": "Hide preview"
+  },
+  "benchmark": {
+    "title": "Benchmark — with skill vs. without",
+    "run": "Run benchmark",
+    "running": "Running…",
+    "loadError": "Could not load benchmark runs.",
+    "status": {
+      "running": "A benchmark is running — this replays each case with and without the skill."
+    },
+    "failed": "Last run failed: {error}",
+    "empty": {
+      "title": "No benchmark yet",
+      "body": "Run the benchmark to measure what this skill adds — the same cases with the skill injected vs. the bare model."
+    },
+    "col": {
+      "metric": "Metric",
+      "delta": "Δ",
+      "aspect": "Aspect"
+    },
+    "metric": {
+      "passRate": "Pass rate",
+      "duration": "Duration",
+      "tokens": "Tokens"
+    },
+    "qualitative": "Qualitative diff (where they actually differ)",
+    "history": "Run history"
   }
 }

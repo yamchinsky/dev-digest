@@ -156,3 +156,30 @@ has no matching `evals/skills/<name>/` directory.
 **Rule: new skill or agent → eval cases in the same commit.** An unprotected
 skill has no regression detector. Write at least one `*.cases.ts` alongside
 any new `SKILL.md` or agent `.md`.
+
+**CI runs the three eval tiers as three separate workflows** (not one file):
+`.github/workflows/eval-quality.yml` (the zero-token static gate — the
+BLOCKING one), `eval-content.yml` (skills + agents, LLM judge), and
+`eval-workflow.yml` (systemic trace). LLM tiers stay non-required until
+pass-rate history exists; only `eval-quality` is safe as a required check.
+
+## Product eval pipeline — `pnpm verify:l06`
+
+The L06 homework gate (agent Eval Pipeline + the Skill Editor benchmark) has a
+one-command verifier: **`pnpm verify:l06`** (root) → `scripts/verify-l06.sh`.
+It runs server + client typecheck, the reviewer-core build, the code-only
+scoring unit tests (`eval/scoring.test.ts`, `skill-eval/scoring.test.ts`), the
+server eval `*.it.test.ts` (self-skip without Docker), and the client eval
+component tests. CI mirrors it in `.github/workflows/verify-l06.yml`.
+
+**Run `pnpm verify:l06` before committing** any change under `server/src/**`,
+`client/src/**`, or `reviewer-core/src/**` that touches the eval pipeline
+(eval cases/runs, scoring, the agent Evals tab, the Skill Editor Evals
+benchmark, the Eval Dashboard).
+
+**Why the script lives in the ROOT `package.json`, not `server/`:** it spans
+three packages (server + client + reviewer-core) and, more to the point,
+`server/package.json` is `git update-index --skip-worktree` (see *Non-obvious
+globals* above) — a committed change there diverges from the template and CI
+sidesteps it entirely. `verify:l06` follows the shell-only `verify:l03`
+precedent: root script, no per-package `package.json` edit.
