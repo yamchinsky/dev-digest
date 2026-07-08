@@ -70,7 +70,44 @@ New in this spec — the Eval Dashboard page:
 - **Label.** The FindingCard control is labelled "Turn into eval case" per the
   assignment wording.
 
+## Addendum — Skill Editor Evals (benchmark)
+
+Added after review feedback ("вкладка Evals у SkillEditor відсутня"). The design
+(`dev-digest-mats/6/skill eval1.png`, artboard "Skill Editor · Evals") is a
+`with_skill`-vs-`without_skill` **benchmark**, not the agent's case/run pipeline:
+it answers "is this skill worth its tokens?". Real backend, not static.
+
+- **AC-L** — The Skills Lab per-skill editor SHALL have an **Evals** tab
+  (order: Config · Context · Preview · Evals · Stats · Versions).
+
+- **AC-M** — WHEN a user opens the Evals tab with a completed benchmark, the
+  system SHALL render a summary table (Pass rate, Duration, Tokens × with_skill /
+  without_skill / signed Δ) and a per-case qualitative diff (aspect × with_skill /
+  without_skill, each with a code-graded pass mark).
+
+- **AC-N** — A "Run benchmark" control SHALL start a run
+  (`POST /skills/:id/benchmarks`, 202, fire-and-forget); it is disabled while a
+  run is in progress and the list self-polls until the run reaches a terminal
+  state.
+
+- **AC-O** — The benchmark SHALL run each skill benchmark case (an `eval_cases`
+  row with `owner_kind='skill'`) twice — with the skill body injected and with
+  the bare model — through the real LLM, and grade each aspect by **code only**
+  (literal regex/substring over the output). NO judge, NO LLM call in scoring.
+
+- **AC-P** — Benchmark runs SHALL persist in a new `skill_eval_runs` table
+  (migration committed) and be served via `GET /skills/:id/benchmarks` and
+  `GET /skill-benchmarks/:id`. A seeded `done` run exists for
+  `branch-coverage-rubric` so the tab is populated with no API key.
+
+Backend: `server/src/modules/skill-eval/` (routes/service/repository + pure
+`scoring.ts`), contract `@devdigest/shared` → `contracts/skill-benchmark.ts`,
+boot reaper wired in `app.ts`. Scoring proven code-only by
+`skill-eval/scoring.test.ts`; UI by `SkillDetail/EvalsTab.test.tsx`. Both are
+in the `verify:l06` gate.
+
 ## Out of scope (this cycle)
 
 Export-to-CI and the peer-test (dropped from this assignment revision); a
-server-computed `EvalDashboard` endpoint; skill-owned eval dashboards.
+server-computed `EvalDashboard` endpoint; a manual skill-benchmark case editor
+(cases are seeded / created via the API, not a form yet).

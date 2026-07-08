@@ -1,6 +1,7 @@
-import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { agents } from './agents';
+import { skills } from './skills';
 import { pullRequests } from './pulls';
 
 // ============================================================ Eval / Conformance / Compose
@@ -70,6 +71,43 @@ export const evalRuns = pgTable('eval_runs', {
   durationMs: integer('duration_ms'),
   costUsd: doublePrecision('cost_usd'),
 });
+
+/**
+ * Skill benchmark runs — the "Skill Editor · Evals" tab. One row = one
+ * with_skill-vs-without_skill benchmark of a skill. Metrics + qualitative diff
+ * are stored as jsonb (SkillBenchmarkMetrics / SkillBenchmarkCaseDiff[] from
+ * @devdigest/shared). The benchmark CASES reuse eval_cases (owner_kind='skill').
+ */
+export const skillEvalRuns = pgTable(
+  'skill_eval_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    skillId: uuid('skill_id')
+      .notNull()
+      .references(() => skills.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['running', 'done', 'failed'] })
+      .notNull()
+      .default('running'),
+    skillVersion: integer('skill_version'),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    // SkillBenchmarkMetrics — null until the run reaches 'done'.
+    withMetrics: jsonb('with_metrics'),
+    withoutMetrics: jsonb('without_metrics'),
+    // SkillBenchmarkCaseDiff[]
+    cases: jsonb('cases'),
+    costUsd: doublePrecision('cost_usd'),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (tbl) => ({
+    skillIdx: index('skill_eval_runs_skill_idx').on(tbl.workspaceId, tbl.skillId),
+  }),
+);
 
 export const conformanceChecks = pgTable('conformance_checks', {
   id: uuid('id').primaryKey().defaultRandom(),

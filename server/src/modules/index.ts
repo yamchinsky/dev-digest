@@ -14,6 +14,7 @@ import onboardingTours from './onboarding-tours/routes.js';
 import brief from './brief/routes.js';
 // `eval` is a reserved word — import under an alias
 import eval_ from './eval/routes.js';
+import skillEval from './skill-eval/routes.js';
 
 /**
  * Module registry. Each feature module is a Fastify plugin in
@@ -43,4 +44,5 @@ export const modules: Record<string, FastifyPluginAsync> = {
   onboardingTours,
   brief,
   eval: eval_,
+  skillEval,
 };

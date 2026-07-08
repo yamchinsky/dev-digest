@@ -11,6 +11,8 @@ import type {
   SkillType,
   SkillVersion,
   AgentSkillLink,
+  SkillBenchmarkRun,
+  SkillBenchmarkStartInput,
 } from "@devdigest/shared";
 
 export interface SkillsFilter {
@@ -156,6 +158,36 @@ export function useSetAgentSkills() {
       api.post<AgentSkillLink[]>(`/agents/${agentId}/skills`, { skill_ids: skillIds }),
     onSuccess: (_d, { agentId }) => {
       qc.invalidateQueries({ queryKey: ["agent-skills", agentId] });
+    },
+  });
+}
+
+// ---- Skill benchmarks (the "Skill Editor · Evals" tab) ----------------------
+
+const skillBenchmarksKey = (skillId: string) => ["skill-benchmarks", skillId] as const;
+
+/** GET /skills/:id/benchmarks → SkillBenchmarkRun[] (newest first).
+    Self-polls every 2 500 ms while any run is still 'running', then stops —
+    so the summary + Run button flip running → done without a manual refresh
+    (a benchmark runs fire-and-forget server-side). */
+export function useSkillBenchmarks(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: skillBenchmarksKey(skillId ?? ""),
+    queryFn: () => api.get<SkillBenchmarkRun[]>(`/skills/${skillId}/benchmarks`),
+    enabled: !!skillId,
+    refetchInterval: (q) =>
+      (q.state.data ?? []).some((r) => r.status === "running") ? 2500 : false,
+  });
+}
+
+/** POST /skills/:id/benchmarks → 202 SkillBenchmarkRun; invalidates the list. */
+export function useStartSkillBenchmark(skillId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SkillBenchmarkStartInput = {}) =>
+      api.post<SkillBenchmarkRun>(`/skills/${skillId}/benchmarks`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: skillBenchmarksKey(skillId) });
     },
   });
 }

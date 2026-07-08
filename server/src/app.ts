@@ -18,6 +18,7 @@ import { AppError } from './platform/errors.js';
 import { modules } from './modules/index.js';
 import { ReviewService } from './modules/reviews/service.js';
 import { EvalService } from './modules/eval/service.js';
+import { SkillEvalService } from './modules/skill-eval/service.js';
 
 // Attach the DI container to every request/instance.
 declare module 'fastify' {
@@ -90,6 +91,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     if (reaped > 0) app.log.info({ reaped }, 'reaped stale running eval_run_batches on boot');
   } catch (err) {
     app.log.warn({ err: (err as Error).message }, 'stale eval-batch reaping failed (non-fatal)');
+  }
+
+  try {
+    const reaped = await new SkillEvalService(container).reapStaleRuns();
+    if (reaped > 0) app.log.info({ reaped }, 'reaped stale running skill_eval_runs on boot');
+  } catch (err) {
+    app.log.warn({ err: (err as Error).message }, 'stale skill-benchmark reaping failed (non-fatal)');
   }
 
   // Security headers (X-Content-Type-Options, X-Frame-Options, …). The API

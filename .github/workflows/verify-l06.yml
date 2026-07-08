@@ -1,0 +1,86 @@
+# verify:l06 — Product L06 eval-pipeline gate.
+#
+# Runs `bash scripts/verify-l06.sh` from the repo root, which executes, in order:
+#   1. server typecheck        (pnpm -C server exec tsc --noEmit)
+#   2. client typecheck        (pnpm -C client exec tsc --noEmit)
+#   3. reviewer-core build     (cd reviewer-core && npm run build)
+#   4. scoring unit tests      (hermetic; no Docker)
+#   5. server eval IT tests    (testcontainers; self-skip if Docker absent,
+#                               but ubuntu-latest HAS Docker so they run in full
+#                               against a postgres/pgvector image via testcontainers)
+#   6. client eval tests       (EvalsTab, eval-cases, FindingCard, eval-dashboard,
+#                               evals components, evals hook)
+#
+# MIXED PACKAGE MANAGERS: server/ and client/ use pnpm; reviewer-core/ uses npm.
+# There is NO workspace root — each package has its own lockfile. We install each
+# package independently. root pnpm install is intentionally omitted.
+#
+# LOCKFILES: server/pnpm-lock.yaml and client/pnpm-lock.yaml are committed, so
+# --frozen-lockfile is safe for those. reviewer-core/ uses npm ci (package-lock.json
+# is committed). Root package.json has no dependencies, only the verify:l06 script.
+#
+# NOTE: server/package.json is git update-index --skip-worktree in the dev
+# environment. CI always gets the committed version from the checkout, so
+# --frozen-lockfile is safe on CI even though local dev has a diverged file.
+name: verify:l06
+
+on:
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'client/**'
+      - 'reviewer-core/**'
+      - 'specs/eval-pipeline.md'
+      - 'specs/SPEC-04-2026-07-eval-pipeline.md'
+      - 'scripts/verify-l06.sh'
+      - 'package.json'
+      - '.github/workflows/verify-l06.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-l06-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: L06 eval-pipeline gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm is needed for server/ and client/. Use version 10 to match the
+      # other product CI workflows (server-unit.yml, client.yml).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # Cache pnpm store — server and client both benefit; pick server as
+          # the representative lockfile (both use pnpm@10).
+          cache: pnpm
+          cache-dependency-path: server/pnpm-lock.yaml
+
+      # Install each package independently — no workspace, no root install.
+      - name: Install server deps
+        run: pnpm install --frozen-lockfile
+        working-directory: server
+
+      - name: Install client deps
+        run: pnpm install --frozen-lockfile
+        working-directory: client
+
+      # reviewer-core uses npm, not pnpm (see root AGENTS.md "no workspace,
+      # mixed pnpm/npm"). npm ci requires package-lock.json, which is committed.
+      - name: Install reviewer-core deps
+        run: npm ci
+        working-directory: reviewer-core
+
+      # Run the full L06 gate from the repo root. The script calls pnpm -C
+      # server/client and cd reviewer-core internally, so it must run from root.
+      - name: Run verify:l06
+        run: bash scripts/verify-l06.sh

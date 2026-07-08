@@ -1,0 +1,60 @@
+# eval · quality (static gate) — ZERO/static tier.
+#
+# This is the CHEAP, DETERMINISTIC gate for harness quality. It runs
+# `pnpm eval:quality` (tsx src/skill-quality.ts) which statically checks every
+# skill and agent for structural completeness: eval coverage, required sections,
+# naming conventions. NO tokens, NO LiteLLM proxy, NO OpenRouter secret.
+#
+# PURPOSE: BLOCKING CHECK — this should be marked as a required status check
+# in branch protection rules. It is fast (<30 s), 100% deterministic, free,
+# and catches the most common harness regressions (missing eval suite for a new
+# skill/agent, broken frontmatter, deleted eval dirs) before any LLM token is
+# spent. The two LLM tiers (eval-content.yml, eval-workflow.yml) must NOT be
+# required checks until weeks of pass-rate history exist — they are probabilistic.
+#
+# CLAUDE.md rule enforced here: "new skill or agent → eval cases in the same commit".
+name: eval · quality (static gate)
+
+on:
+  pull_request:
+    paths:
+      - '.claude/skills/**'
+      - '.claude/agents/**'
+      - 'CLAUDE.md'
+      - 'AGENTS.md'
+      - 'evals/**'
+      - '.github/workflows/eval-quality.yml'
+  # Manual run — useful after adding a new skill/agent to verify coverage.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: static quality gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: evals/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check eval coverage (static, no LLM)
+        run: pnpm eval:quality

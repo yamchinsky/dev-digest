@@ -84,6 +84,11 @@ _2026-07-05_ · `server/src/adapters/git/diff-parser.ts` (`hunk.newLineNumbers`)
 
 `newLineNumbers` accumulates ALL new-side lines a hunk covers (context included), not only `+` additions — and the citation-grounding gate validates `start_line/end_line` against that superset. So a finding citing an unchanged context line inside a hunk still survives grounding, and any "must the expectation hit a `+` line?" check (e.g. self-validating eval seed diffs) that intersects with `newLineNumbers` is deliberately looser than added-lines-only. Don't "tighten" it to `+`-only without changing the gate's semantics.
 
+### `eval_cases` is owner-polymorphic (`owner_kind` ∈ {agent, skill}) — skill benchmarks reuse it, no new cases table
+_2026-07-09_ · `server/src/db/schema/eval.ts` (`evalCases.ownerKind`), `server/src/modules/skill-eval/`
+
+The `eval_cases` table already carries `owner_kind: text({ enum: ['skill','agent'] })`, but until L06 only the `'agent'` path was wired (agent eval pipeline). When adding skill benchmarks, store the benchmark cases as `eval_cases` rows with `owner_kind='skill'` and `owner_id=<skillId>` — do NOT add a parallel cases table (only `skill_eval_runs`, the run records, is genuinely new). Consequence for tests: `seed-eval-cases.it.test.ts` asserts `toHaveLength(8)` but scopes its query by the General Reviewer's `ownerId`, so seeding extra skill-owned cases in `seed()` does not affect that count — a skill-cases count check must filter by `owner_kind='skill'` itself.
+
 ## Tool & Library Notes
 
 ### Drizzle `text('col', { enum: [...] })` is TypeScript-only — no SQL CHECK constraint is generated

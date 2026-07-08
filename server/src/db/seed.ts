@@ -9,6 +9,7 @@ import {
   TEST_QUALITY_REVIEWER_PROMPT,
 } from './seed-prompts.js';
 import { seedEvalCases } from './seed-eval-cases.js';
+import { seedSkillBenchmark } from './seed-skill-benchmark.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -356,6 +357,10 @@ Flag the following:
   // L06: five demo eval cases for the General Reviewer (idempotent by
   // (workspace_id, owner_id, name) — see seed-eval-cases.ts).
   await seedEvalCases(db);
+
+  // L06: skill benchmark cases + one done run for the "Skill Editor · Evals"
+  // tab (idempotent — see seed-skill-benchmark.ts).
+  await seedSkillBenchmark(db);
 
   return { workspaceId, userId };
 }
