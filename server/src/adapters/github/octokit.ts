@@ -1,3 +1,5 @@
+import { inflateRaw } from 'node:zlib';
+import { promisify } from 'node:util';
 import { Octokit } from 'octokit';
 import type {
   GitHubClient,
@@ -11,8 +13,75 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  WorkflowRun,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
+
+const inflateRawAsync = promisify(inflateRaw);
+
+/**
+ * Parse a ZIP archive buffer and return the string contents of the first JSON
+ * file found inside. Uses a minimal ZIP local file header parser — sufficient
+ * for single-file artifacts produced by GitHub Actions.
+ *
+ * ZIP local file entry layout (little-endian):
+ *   4  — signature (0x04034b50)
+ *   2  — version needed
+ *   2  — general purpose bit flag
+ *   2  — compression method (0 = stored, 8 = deflate)
+ *   2  — last mod file time
+ *   2  — last mod file date
+ *   4  — crc-32
+ *   4  — compressed size
+ *   4  — uncompressed size
+ *   2  — file name length
+ *   2  — extra field length
+ *   n  — file name
+ *   m  — extra field
+ *   k  — file data
+ */
+async function unzipFirstJson(buffer: Buffer): Promise<string> {
+  const LOCAL_FILE_SIG = 0x04034b50;
+  let offset = 0;
+
+  while (offset + 30 <= buffer.length) {
+    const sig = buffer.readUInt32LE(offset);
+    if (sig !== LOCAL_FILE_SIG) break;
+
+    const method = buffer.readUInt16LE(offset + 8);
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const fileNameLen = buffer.readUInt16LE(offset + 26);
+    const extraLen = buffer.readUInt16LE(offset + 28);
+    const dataOffset = offset + 30 + fileNameLen + extraLen;
+    const compressedData = buffer.subarray(dataOffset, dataOffset + compressedSize);
+
+    let content: string;
+    if (method === 0) {
+      // STORED
+      content = compressedData.toString('utf8');
+    } else if (method === 8) {
+      // DEFLATED
+      const decompressed = await inflateRawAsync(compressedData);
+      content = decompressed.toString('utf8');
+    } else {
+      // Unknown compression — skip entry
+      offset = dataOffset + compressedSize;
+      continue;
+    }
+
+    // Return the first JSON-parseable entry
+    try {
+      JSON.parse(content);
+      return content;
+    } catch {
+      // Not valid JSON — try next entry
+    }
+
+    offset = dataOffset + compressedSize;
+  }
+
+  throw new Error('unzipFirstJson: no valid JSON file found in ZIP archive');
+}
 
 const TIMEOUT = 30_000;
 
@@ -368,5 +437,82 @@ export class OctokitGitHubClient implements GitHubClient {
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),
     );
     return res.data.login;
+  }
+
+  async listWorkflowRuns(repo: RepoRef, workflowFile: string): Promise<WorkflowRun[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const res = await this.octokit.rest.actions.listWorkflowRuns({
+            owner: repo.owner,
+            repo: repo.name,
+            workflow_id: workflowFile,
+            per_page: 50,
+          });
+          return res.data.workflow_runs.map((run) => ({
+            id: String(run.id),
+            status: run.status ?? 'unknown',
+            conclusion: run.conclusion ?? null,
+            html_url: run.html_url,
+            created_at: run.created_at,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async downloadArtifact(repo: RepoRef, runId: string, artifactName: string): Promise<string> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          // List artifacts for the workflow run to find the one matching `artifactName`.
+          const { data: artifactsData } =
+            await this.octokit.rest.actions.listWorkflowRunArtifacts({
+              owner: repo.owner,
+              repo: repo.name,
+              run_id: Number(runId),
+              per_page: 20,
+            });
+
+          const artifact = artifactsData.artifacts.find((a) => a.name === artifactName);
+          if (!artifact) {
+            throw new Error(
+              `Artifact "${artifactName}" not found for run ${runId} in ${repo.owner}/${repo.name}`,
+            );
+          }
+
+          // GitHub returns a 302 redirect to a signed storage URL.
+          const downloadResp = await this.octokit.rest.actions.downloadArtifact({
+            owner: repo.owner,
+            repo: repo.name,
+            artifact_id: artifact.id,
+            archive_format: 'zip',
+            request: { redirect: 'follow' },
+          });
+
+          // The response URL is the redirect target; fetch the binary.
+          const url =
+            (downloadResp as unknown as { url: string }).url ??
+            (downloadResp as unknown as { data: string }).data;
+
+          let zipBuffer: Buffer;
+          if (typeof url === 'string' && url.startsWith('http')) {
+            const fetchResp = await fetch(url);
+            if (!fetchResp.ok) {
+              throw new Error(`Failed to download artifact zip: HTTP ${fetchResp.status}`);
+            }
+            zipBuffer = Buffer.from(await fetchResp.arrayBuffer());
+          } else {
+            // Some Octokit versions return the ArrayBuffer directly
+            const raw = (downloadResp as unknown as { data: ArrayBuffer }).data;
+            zipBuffer = Buffer.from(raw);
+          }
+
+          return unzipFirstJson(zipBuffer);
+        })(),
+        TIMEOUT,
+      ),
+    );
   }
 }

@@ -39,6 +39,11 @@ _2026-07-02_ · `server/src/modules/reviews/run-executor.ts:297`
 
 SPEC-01 AC-16 says a missing attached doc "SHALL log a `warn` entry", but the run-log entry is emitted via `runLog.info(`[warn] Context doc missing: …`)` — the structured `kind` field stays `"info"`; the warn-ness lives only in the message text. Any test or log filter that matches `kind === "warn"` finds nothing (bit me during live AC-16 verification — filter by msg substring instead). If a real `runLog.warn` level ever lands, migrate this call; until then, assert on the message prefix, not the kind.
 
+### `*.it.test.ts` silently skip — looking green — when a COLD `docker info` exceeds the 5s `dockerAvailable()` timeout
+_2026-07-09_ · `server/test/helpers/pg.ts:23`
+
+`dockerAvailable()` runs `execSync('docker info', { timeout: 5000 })`. On a cold daemon `docker info` can take ~5.7s and time out, so the helper returns false and the whole suite reports "N skipped" — indistinguishable at a glance from "passed", a false-pass trap that let 4 genuinely-failing CI it-tests hide as green across two implementer sandboxes. A warm `docker info` is ~1.1s. Before trusting an it-test run, warm the daemon (`docker info` twice) and immediately invoke vitest so the in-test check lands inside the warm window; then confirm the summary says "passed", not "skipped".
+
 ## Codebase Patterns
 
 ### Zod `response` schemas are ENFORCED at runtime by serializerCompiler — they gate persisted-jsonb shape drift
@@ -110,6 +115,11 @@ _2026-07-02_ · `server/src/modules/repos/repository.ts` (`getClonePathsByIds`)
 _2026-07-05_ · `server/src/modules/eval/scoring.test.ts` (fixture helpers)
 
 Writing `{ file: 'a.ts', ...overrides }` where `overrides` may also carry `file` compiles under vitest's transform (esbuild strips types; later keys win at runtime) but `tsc --noEmit` rejects it with TS2783 "property specified more than once". A test suite can be fully green while the typecheck gate is red. In fixture builders, list defaults first and put the `...overrides` spread LAST, and never re-list a required field you're already spreading.
+
+### Drizzle `onConflictDoUpdate({ target })` throws at runtime if the target columns lack a UNIQUE index
+_2026-07-09_ · `server/src/modules/ci/repository.ts`
+
+`onConflictDoUpdate` / `onConflictDoNothing` with an explicit `target: [colA, colB]` typechecks fine but Postgres rejects it at runtime — `"there is no unique or exclusion constraint matching the ON CONFLICT specification"` — unless those columns carry a matching DB-level UNIQUE index. `ci_installations(agent_id, repo, target_type)` had none, so every `open_pr` export threw 500 and cascaded into 4 red it-tests, all under a green typecheck. Either add the unique index in the migration, or fall back to a select-then-insert/update in the repository. Never infer `target` validity from a passing `tsc`.
 
 ## Recurring Errors & Fixes
 
