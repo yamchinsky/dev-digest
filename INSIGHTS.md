@@ -91,6 +91,11 @@ New shared-contract files that need the `Provider` Zod enum must import it from 
 
 ## Tool & Library Notes
 
+### `git diff --stat A...B` (three-dot) with multiple merge bases prints a phantom mega-diff — use two-dot to see what you'd actually lose
+_2026-07-10_ · `repo-wide` (git tooling; hit while reconciling a force-push)
+
+Before force-pushing our merge over a diverged remote, `git diff --stat HEAD...origin/<branch>` reported 58 files / 4131 insertions and warned `multiple merge bases, using <sha>` — it looked like the push would discard the entire multi-agent-review feature. That was an artifact: three-dot diffs against a merge commit pick ONE arbitrary merge base, so the "diff" includes everything that landed on the other parent's line, not what's unique to the remote tip. The truthful check is two-dot `git diff --name-status HEAD origin/<branch>` (working-tree to working-tree), which showed the real delta was 4 files — our SPEC renumber. Rule when deciding if a force-push loses work: two-dot `git diff HEAD <remote>` answers "what content differs right now"; three-dot is for "what changed along one branch since divergence" and is unreliable across a merge commit with multiple bases. Never green-light or veto a force-push on a three-dot stat alone.
+
 ### A new `pull_request` workflow can be tested WITHOUT merging to main — open a PR into the feature branch that carries it
 _2026-07-05_ · `.github/workflows/evals.yml` (PR #25 flow)
 
