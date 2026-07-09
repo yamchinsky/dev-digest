@@ -1,4 +1,4 @@
-# Spec: Multi-Agent Review — Worktree A  |  Spec ID: SPEC-05  |  Status: draft
+# Spec: Multi-Agent Review — Worktree A  |  Spec ID: SPEC-05  |  Status: implemented
 Supersedes: —
 Modules: server, client
 
@@ -234,7 +234,11 @@ The results page surfaces third-party / model-generated text:
 
 No new untrusted-input surface is introduced beyond those governed by the existing `INJECTION_GUARD` convention.
 
-## [NEEDS CLARIFICATION]
+## Resolved during implementation
 
-- **Results URL shape:** the run-id set can ride as a query param (`/multi-agent-review/results?pr=<id>&runs=<r1,r2>`) or a path segment; the implementer picks the Next.js-idiomatic form that avoids a static/dynamic route collision with the Configure page. Non-blocking.
-- **Nav gKey assignment:** a shortcut key (e.g. "m") must be checked against the SHORTCUTS registry for conflicts at implementation time; omit if none is free (AC-22 permits this).
+- **Results URL shape:** shipped as `/multi-agent-review/results?pr=<prId>&runs=<r1,r2,…>` — query params on a static route, avoiding a static/dynamic route collision with the Configure page at `/multi-agent-review`.
+- **Nav gKey:** `g m` assigned (free in the SHORTCUTS registry) — see `client/src/vendor/ui/nav.ts`.
+
+## Deferred to manual verification (test-writer disabled)
+
+- **AC-20 / AC-21 server integration tests:** the estimate-averaging read (`GET /agents`) and the `agentIds[]` fan-out + 400 path (`POST /pulls/:id/review`) are implemented and unit-covered on the client side, but their DB-backed `*.it.test.ts` (Docker/Postgres) were not authored. Author them when the eval/integration lane is next touched.

@@ -27,6 +27,11 @@ pnpm **11.x** moved build-script approval (native deps like `esbuild`, `sharp`, 
 
 > Updated 2026-06-19: this entry originally (mis)diagnosed the file as a stray artifact to delete. **That was wrong** — deleting it is futile (pnpm 11 regenerates it on the next run) and `server/`'s copy is committed. The real fix is filling in `allowBuilds`, above. Also note: corepack injects a `"packageManager": "pnpm@<ver>+sha512…"` line into `package.json` on run; that one IS unwanted here — revert just that line.
 
+### A NAV entry's `key` needs an exact-match `shell.nav.<key>` in `shell.json` or the `nav-i18n.test.ts` guard fails
+_2026-07-09_ · `client/src/vendor/ui/nav.ts`, `client/messages/en/shell.json`
+
+Adding a sidebar NAV item requires a `shell.nav.<key>` string in `messages/en/shell.json` whose key is byte-identical to the item's `key` in `nav.ts` — hyphens included (`multi-agent-review`, not a shortened alias). The `nav-i18n.test.ts` guard enforces this and fails with no hint that i18n is the cause when the key is missing or aliased. When adding a nav entry, add the matching `shell.nav.<key>` in the same change.
+
 ## Codebase Patterns
 
 ### Chip `color` prop styles only the leading icon — chip border/background come from `active`
@@ -59,6 +64,11 @@ _2026-07-05_ · `src/vendor/ui/icons.tsx` (~82 exported names)
 
 Icon names in `Button icon="…"` / `TABS` entries resolve against the vendored registry, NOT the full lucide catalogue: `PlusCircle` and `BarChart2` don't exist (`Plus` and `BarChart` do), and a wrong name fails at runtime, not typecheck-time in all call sites. Bit two SPEC-04 tasks independently. Before referencing any icon, grep `icons.tsx` for the exact export; extend the registry if the icon is genuinely missing.
 
+### Workspace-wide PR list = `useRepos()` + `useQueries()` — there is no `useAllPulls()` hook
+_2026-07-09_ · `client/src/app/multi-agent-review/_components/ConfigureRunPage/ConfigureRunPage.tsx`
+
+The PR hooks fetch per-repo; there is no single hook that returns every PR across the workspace. Assemble it with `useRepos()` then a parallel `useQueries()` fan-out (imported directly from `@tanstack/react-query`, not `lib/hooks/`) — one query per repo, results flattened. Precedent already in `lib/hooks/evals.ts` and the Project Context `ContextTab.tsx`. Don't write a new `useAllPulls`; reuse this fan-out shape.
+
 ## Tool & Library Notes
 
 ### Swapped inline-style variants must not mix a `border` shorthand with a `borderBottom` longhand
@@ -90,6 +100,16 @@ _2026-07-05_ · `src/vendor/ui/kit/FormField.tsx`
 _2026-07-05_ · `EvalsTab.test.tsx` and any test rendering a `charts/` component
 
 jsdom has no layout engine, so `ResponsiveContainer` measures 0×0 and warns on every render; assertions still pass and the stubbed `ResizeObserver` in `src/test/setup.ts` doesn't silence it. Treat the warning as noise, not a broken test. The only real silencer is mocking `recharts` in test setup — do that only if the noise starts hiding real failures.
+
+### Client tsconfig has `noUncheckedIndexedAccess` — array/record index access is `T | undefined`
+_2026-07-09_ · `client/tsconfig.json`, bit `src/app/multi-agent-review/results/_lib/groupFindingsByLocation.ts`
+
+`noUncheckedIndexedAccess: true` makes every `arr[i]` / `record[key]` yield `T | undefined` even inside a `for` loop or right after a `.length` check. Component code must narrow explicitly (`const g = groups[0]; if (!g) return`), and tests must add `!` after a `toHaveLength(n)` guard (`expect(groups).toHaveLength(1); groups[0]!.cells`). It reads like a spurious type error in correct code — it's the config, not the logic. Bit T3 repeatedly.
+
+### `vi.doMock` after a static `import` of the module under test is a silent no-op
+_2026-07-09_ · `client/src/app/repos/[repoId]/pulls/[number]/_components/RunReviewDropdown/RunReviewDropdown.test.tsx`
+
+Calling `vi.doMock("@/lib/hooks/agents", …)` inside an `it()` after the component was already statically imported does nothing — the binding is fixed at import time, so the test silently runs against the module-level `vi.mock` and asserts the wrong branch (an "empty agents" test actually ran with two agents and still passed). The coverage gate flagged it as passing-but-ineffective. Use a module-level `vi.mock` factory delegating to a `vi.fn()` and switch behaviour per-test with `mockReturnValue`.
 
 ## Recurring Errors & Fixes
 
