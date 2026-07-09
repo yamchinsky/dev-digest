@@ -91,6 +91,11 @@ New shared-contract files that need the `Provider` Zod enum must import it from 
 
 ## Tool & Library Notes
 
+### `git diff --stat A...B` (three-dot) with multiple merge bases prints a phantom mega-diff — use two-dot to see what you'd actually lose
+_2026-07-10_ · `repo-wide` (git tooling; hit while reconciling a force-push)
+
+Before force-pushing our merge over a diverged remote, `git diff --stat HEAD...origin/<branch>` reported 58 files / 4131 insertions and warned `multiple merge bases, using <sha>` — it looked like the push would discard the entire multi-agent-review feature. That was an artifact: three-dot diffs against a merge commit pick ONE arbitrary merge base, so the "diff" includes everything that landed on the other parent's line, not what's unique to the remote tip. The truthful check is two-dot `git diff --name-status HEAD origin/<branch>` (working-tree to working-tree), which showed the real delta was 4 files — our SPEC renumber. Rule when deciding if a force-push loses work: two-dot `git diff HEAD <remote>` answers "what content differs right now"; three-dot is for "what changed along one branch since divergence" and is unreliable across a merge commit with multiple bases. Never green-light or veto a force-push on a three-dot stat alone.
+
 ### A new `pull_request` workflow can be tested WITHOUT merging to main — open a PR into the feature branch that carries it
 _2026-07-05_ · `.github/workflows/evals.yml` (PR #25 flow)
 
@@ -148,6 +153,11 @@ _2026-07-09_ · `package.json` (`repo-wide` — the root `verify:l06` script)
 The repo root has a minimal `package.json` (just the `verify:l06` script) but is NOT a pnpm workspace. Invoking `pnpm verify:l06` (or any `pnpm` command) from root makes pnpm "adopt" that package.json: it injects a `"packageManager": "pnpm@…"` field into it AND writes a stray root `pnpm-lock.yaml` — both unintended, both pollute the diff, and the packageManager edit silently rides along in a later `git add`. Run the gate as `bash scripts/verify-l06.sh` (or `pnpm -C server verify:l06`) instead of `pnpm verify:l06` at root. If you already dirtied it: `git checkout HEAD -- package.json && rm -f pnpm-lock.yaml`.
 
 ## Recurring Errors & Fixes
+
+### Parallel worktree branches both mint the same `SPEC-NN` — the "global sequence" convention has no allocator, so merges collide
+_2026-07-10_ · `specs/README.md`, `specs/SPEC-NN-*.md` headers, `docs/plans/*.md` spec refs
+
+`specs/README.md` declares `NN` a **global** sequence across all `specs/` folders, but nothing enforces it: two worktree branches developed in parallel (Multi-Agent Review, Export to CI) each independently allocated `SPEC-05`, both wrote a `SPEC-05-*.md` file, and the merge produced a real number collision (not just a text conflict in the index). Resolving it means picking a loser and renumbering it end-to-end: `git mv` the spec file, edit the `Spec ID: SPEC-NN` line inside it, fix the `**Spec:** SPEC-NN (path)` ref in its `docs/plans/<feature>.md`, and correct the index line — grep `SPEC-05` repo-wide (excluding `node_modules`/`server/clones`) to catch every ref before committing. Prevention: when starting a spec on a fresh branch, reserve the next number by checking `origin`'s `specs/` too, not just the local tree; the newer/later-merged feature is the natural one to bump.
 
 ### `git add <file> && git commit --amend` commits the ENTIRE index — pre-staged files from another terminal ride along
 _2026-07-05_ · `repo-wide` (git tooling; bit us on `feat/evals-ci`)

@@ -1,6 +1,6 @@
 # Implementation Plan: export-to-ci
 
-**Spec:** SPEC-05 (`specs/SPEC-05-2026-07-export-to-ci.md`)
+**Spec:** SPEC-06 (`specs/SPEC-06-2026-07-export-to-ci.md`)
 
 ## Overview
 

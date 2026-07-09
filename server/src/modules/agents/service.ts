@@ -63,7 +63,43 @@ export class AgentsService {
 
   async list(workspaceId: string): Promise<Agent[]> {
     const rows = await this.repo.list(workspaceId);
-    return rows.map(toAgentDto);
+    const dtos = rows.map(toAgentDto);
+
+    // Batch-query the last 3 done runs per agent in ONE SQL call (window function).
+    // Compute avg duration and avg cost (via PriceBook) and fold into each DTO.
+    const agentIds = rows.map((r) => r.id);
+    const runRows = await this.repo.lastDoneRunsPerAgent(workspaceId, agentIds);
+    const priceBook = this.container.priceBook;
+
+    // Group by agentId for O(n) fold.
+    const byAgent = new Map<string, typeof runRows>();
+    for (const row of runRows) {
+      if (!row.agentId) continue;
+      const bucket = byAgent.get(row.agentId) ?? [];
+      bucket.push(row);
+      byAgent.set(row.agentId, bucket);
+    }
+
+    return dtos.map((dto) => {
+      const bucket = byAgent.get(dto.id) ?? [];
+      if (bucket.length === 0) {
+        return { ...dto, estimate: { duration_avg_ms: null, cost_avg_usd: null } };
+      }
+      const durationSum = bucket.reduce((s, r) => s + (r.durationMs ?? 0), 0);
+      const duration_avg_ms = durationSum / bucket.length;
+
+      // Cost: compute per run via PriceBook; null if any run has no model/tokens.
+      const costs: number[] = [];
+      for (const r of bucket) {
+        if (r.model && r.tokensIn != null && r.tokensOut != null) {
+          const c = priceBook.estimate(r.model, r.tokensIn, r.tokensOut);
+          if (c != null) costs.push(c);
+        }
+      }
+      const cost_avg_usd = costs.length > 0 ? costs.reduce((s, c) => s + c, 0) / costs.length : null;
+
+      return { ...dto, estimate: { duration_avg_ms, cost_avg_usd } };
+    });
   }
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {

@@ -45,19 +45,32 @@ export class ReviewService {
   // ===========================================================================
 
   /**
-   * Resolve which agents to run. `all` → all enabled agents; else a single agent.
+   * Resolve which agents to run.
+   *  - `agentIds` → the specific subset (takes precedence over `all`).
+   *  - `all` → all enabled agents.
+   *  - `agentId` → a single agent.
+   *  Throws 400 when none of the three is provided / valid.
    */
   async resolveTargets(
     workspaceId: string,
-    opts: { agentId?: string; all?: boolean },
+    opts: { agentId?: string; all?: boolean; agentIds?: string[] },
   ): Promise<AgentRow[]> {
+    if (opts.agentIds && opts.agentIds.length > 0) {
+      const rows: AgentRow[] = [];
+      for (const id of opts.agentIds) {
+        const agent = await this.agents.getById(workspaceId, id);
+        if (!agent) throw new NotFoundError(`Agent not found: ${id}`);
+        rows.push(agent);
+      }
+      return rows;
+    }
     if (opts.all) return this.agents.listEnabled(workspaceId);
     if (opts.agentId) {
       const agent = await this.agents.getById(workspaceId, opts.agentId);
       if (!agent) throw new NotFoundError('Agent not found');
       return [agent];
     }
-    throw new AppError('invalid_run_request', 'Provide agentId or all:true', 400);
+    throw new AppError('invalid_run_request', 'Provide agentId, all:true, or agentIds', 400);
   }
 
   /** Delete a whole review run (one agent's pass) + its findings (cascade). */

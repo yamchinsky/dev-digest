@@ -12,7 +12,7 @@ import { PrDetailHeader } from "./_components/PrDetailHeader";
 import { OverviewTab } from "./_components/OverviewTab";
 import { FindingsTab } from "./_components/FindingsTab";
 import { DiffTab } from "./_components/DiffTab";
-import RunTraceDrawer from "./_components/RunTraceDrawer";
+import RunTraceDrawer from "@/components/RunTraceDrawer";
 import { ApiError } from "@/services/api";
 import { githubPrUrl } from "@/utils/github-urls";
 import { usePrDetailPage } from "./_hooks/usePrDetailPage";

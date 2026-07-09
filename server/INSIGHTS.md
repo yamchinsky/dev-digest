@@ -121,6 +121,11 @@ _2026-07-05_ · `server/src/modules/eval/scoring.test.ts` (fixture helpers)
 
 Writing `{ file: 'a.ts', ...overrides }` where `overrides` may also carry `file` compiles under vitest's transform (esbuild strips types; later keys win at runtime) but `tsc --noEmit` rejects it with TS2783 "property specified more than once". A test suite can be fully green while the typecheck gate is red. In fixture builders, list defaults first and put the `...overrides` spread LAST, and never re-list a required field you're already spreading.
 
+### Variadic UUID IN-clause in raw Drizzle SQL uses `= ANY(ARRAY[…]::uuid[])` + `sql.join`, not `inArray`
+_2026-07-09_ · `server/src/modules/agents/repository.ts` (`lastDoneRunsPerAgent`)
+
+`inArray(col, ids)` needs an ORM-mapped column reference and can't target the output of a raw window-function subquery. For a last-N-per-group query (`ROW_NUMBER() OVER (PARTITION BY agent_id ORDER BY ran_at DESC)` filtered to `rn <= 3`) written as `db.execute(sql\`…\`)`, pass the id list as `= ANY(ARRAY[${sql.join(ids.map(id => sql\`${id}\`), sql\`, \`)}]::uuid[])` — the `::uuid[]` cast is required or Postgres rejects the text-vs-uuid comparison. Pairs with the empty-array note above: guard `ids.length === 0` before building the clause.
+
 ### Drizzle `onConflictDoUpdate({ target })` throws at runtime if the target columns lack a UNIQUE index
 _2026-07-09_ · `server/src/modules/ci/repository.ts`
 

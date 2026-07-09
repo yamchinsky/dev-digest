@@ -1,0 +1,52 @@
+{
+  "title": "Multi-Agent Review Results",
+  "columns": "Columns",
+  "tabs": "Tabs",
+  "viewTrace": "View trace",
+  "viewToggle": {
+    "label": "View"
+  },
+  "status": {
+    "running": "running",
+    "done": "done",
+    "failed": "failed",
+    "cancelled": "cancelled",
+    "pending": "pending"
+  },
+  "score": "Score",
+  "column": {
+    "noFindings": "No findings",
+    "error": "Run failed",
+    "cancelled": "Run cancelled",
+    "notFound": "Run not found",
+    "findingAt": "{file}:{line}"
+  },
+  "tab": {
+    "summary": "Summary",
+    "duration": "Duration",
+    "cost": "Cost",
+    "noSummary": "No summary available.",
+    "na": "n/a"
+  },
+  "finding": {
+    "confidence": "{pct}% confidence",
+    "rationale": "Rationale",
+    "suggestion": "Suggested fix",
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "learn": "Learn",
+    "learnTooltip": "TODO: Memory homework",
+    "toEvalCase": "Turn into eval case",
+    "toEvalCaseTooltip": "TODO: L06 evals",
+    "accepted": "Accepted",
+    "dismissed": "Dismissed"
+  },
+  "disagreement": {
+    "title": "Where agents disagree",
+    "showOnlyConflicts": "Show only conflicts",
+    "didNotFlag": "did not flag",
+    "empty": "All agents agree — no conflicting locations.",
+    "emptyConflicts": "No conflicts with current filter.",
+    "singleAgent": "No cross-agent data — only one agent ran."
+  }
+}
