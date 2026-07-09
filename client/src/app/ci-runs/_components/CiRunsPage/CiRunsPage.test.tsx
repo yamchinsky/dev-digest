@@ -250,9 +250,16 @@ describe("CiRunsPage — filter controls (AC-22)", () => {
     setRuns([]);
   });
 
-  it("passes the default 'since' filter to useCiRuns on mount", () => {
+  // `since` must reach the API as an ISO datetime, not the "7d" window token —
+  // the server validates it with z.string().datetime() and 422s otherwise.
+  const daysAgo = (iso: string) =>
+    (Date.now() - new Date(iso).getTime()) / 86_400_000;
+
+  it("passes the default 'since' filter to useCiRuns as an ISO datetime ~7 days back", () => {
     renderPage();
-    expect(hooksState.lastCiRunsArgs.filters.since).toBe("7d");
+    const since = hooksState.lastCiRunsArgs.filters.since as string;
+    expect(new Date(since).toISOString()).toBe(since);
+    expect(daysAgo(since)).toBeCloseTo(7, 1);
   });
 
   it("updates the 'since' filter when user changes the time window select", async () => {
@@ -265,7 +272,8 @@ describe("CiRunsPage — filter controls (AC-22)", () => {
     await user.selectOptions(selects[0]!, "30d");
 
     await waitFor(() => {
-      expect(hooksState.lastCiRunsArgs.filters.since).toBe("30d");
+      const since = hooksState.lastCiRunsArgs.filters.since as string;
+      expect(daysAgo(since)).toBeCloseTo(30, 1);
     });
   });
 

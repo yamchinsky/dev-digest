@@ -19,6 +19,11 @@ import {
 const TIME_WINDOWS = ["7d", "30d", "90d"] as const;
 type TimeWindow = (typeof TIME_WINDOWS)[number];
 
+// The `since` API param is an ISO datetime (z.string().datetime on the server),
+// so the UI window token is converted at the call boundary.
+const WINDOW_DAYS: Record<TimeWindow, number> = { "7d": 7, "30d": 30, "90d": 90 };
+const DAY_MS = 86_400_000;
+
 const STATUS_VALUES = ["", "succeeded", "failed", "no_findings", "running"] as const;
 type StatusFilter = (typeof STATUS_VALUES)[number];
 
@@ -66,8 +71,13 @@ export function CiRunsPage() {
   const [repo, setRepo] = React.useState<string>("");
   const [status, setStatus] = React.useState<StatusFilter>("");
 
+  const sinceIso = React.useMemo(
+    () => new Date(Date.now() - WINDOW_DAYS[since] * DAY_MS).toISOString(),
+    [since],
+  );
+
   const filters: CiRunsFilters = {
-    since,
+    since: sinceIso,
     ...(agentId ? { agent_id: agentId } : {}),
     ...(repo.trim() ? { repo: repo.trim() } : {}),
     ...(status ? { status } : {}),

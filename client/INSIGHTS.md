@@ -136,6 +136,16 @@ _2026-07-05_ · `FindingsPanel.test.tsx` (`vi.mock("@/lib/hooks/evals", …)` be
 
 `FindingsPanel.test.tsx` wraps only `NextIntlClientProvider`, so every TanStack hook the component uses must be `vi.mock`ed or the render throws "No QueryClient set". Consequence: wiring one more hook into the panel (eval-case creation in SPEC-04) requires a matching mock in a test file the feature task doesn't own — an invisible cross-file dependency. When adding a hook to a widely-tested component, grep its test for the mock list; longer-term fix is a shared render helper with a real test QueryClient.
 
+### The `VALID_TABS` two-registry trap bit a THIRD time (SPEC-06 CI tab) — whitelist is now derived from `TABS`
+_2026-07-10_ · `src/app/agents/[id]/page.tsx` (see the 2026-07-02 entry above for the mechanism)
+
+The Export-to-CI worktree shipped `CiTab` + `ExportWizard` fully tested, but never added `"ci"` to the page's `VALID_TABS` — so `?tab=ci` silently fell back to Config and the ENTIRE feature was unreachable in the running app (no wizard → no `ci_installations` row → CI Runs permanently empty; the downstream symptom looked like an ingest bug, not a nav bug). Component tests can't catch this: they mount `CiTab` directly, bypassing the page whitelist. Durable fix applied: `VALID_TABS = TABS.map(t => t.key)` derived from the editor's tab registry — one registry, drift impossible. If another page grows a `?tab=` whitelist, derive it the same way instead of copying the array.
+
+### A UI filter token leaking into a Zod-validated query param = silent 422 = permanent empty state; hook-mocking tests cement the wrong wire format
+_2026-07-10_ · `src/app/ci-runs/_components/CiRunsPage` vs `server/src/modules/ci/routes.ts` `CiRunsQuery.since`
+
+`CiRunsPage` sent its UI window token (`since=7d`) straight to `GET /ci-runs`, whose schema is `z.string().datetime({ offset: true })` → 422 on every load. Two policies make this invisible: query-side 4xx errors don't toast (by design), and the page only branches on `isLoading`/empty — so a failing query renders as a plausible "no runs yet" empty state forever. The component test asserted `filters.since === "7d"` against a mocked hooks layer, so it *protected the bug*: jsdom tests that mock `@/lib/hooks/*` verify UI→hook wiring only, never the wire format — cross-check any new query param against the route's Zod schema by hand (or hit the live route once). Convert UI tokens to contract values at the page/hook boundary (`useMemo` → ISO string). Curl-repro gotcha: an unencoded `+00:00` offset in a query string decodes as a space and 422s even when the value is valid — test with the `Z` suffix or `--data-urlencode`.
+
 ## Session Notes
 _None yet._
 
