@@ -1,4 +1,12 @@
-import { pgTable, uuid, text, integer, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  timestamp,
+  doublePrecision,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { agents } from './agents';
 
 export const ciInstallations = pgTable('ci_installations', {
@@ -11,16 +19,30 @@ export const ciInstallations = pgTable('ci_installations', {
   installedAt: timestamp('installed_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const ciRuns = pgTable('ci_runs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  ciInstallationId: uuid('ci_installation_id').references(() => ciInstallations.id, {
-    onDelete: 'set null',
-  }),
-  prNumber: integer('pr_number'),
-  ranAt: timestamp('ran_at', { withTimezone: true }),
-  status: text('status'),
-  findingsCount: integer('findings_count'),
-  costUsd: doublePrecision('cost_usd'),
-  githubUrl: text('github_url'),
-  source: text('source'),
-});
+export const ciRuns = pgTable(
+  'ci_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ciInstallationId: uuid('ci_installation_id').references(() => ciInstallations.id, {
+      onDelete: 'set null',
+    }),
+    prNumber: integer('pr_number'),
+    ranAt: timestamp('ran_at', { withTimezone: true }),
+    status: text('status'),
+    findingsCount: integer('findings_count'),
+    costUsd: doublePrecision('cost_usd'),
+    githubUrl: text('github_url'),
+    source: text('source'),
+    // AC-33: new nullable columns for CI sync ingest
+    agent: text('agent'),
+    durationS: doublePrecision('duration_s'),
+    githubRunId: text('github_run_id'),
+    critical: integer('critical'),
+    warning: integer('warning'),
+    suggestion: integer('suggestion'),
+  },
+  (table) => [
+    // Deduplication constraint for idempotent CI sync (T2's onConflictDoNothing target).
+    uniqueIndex('ci_runs_installation_run_id_idx').on(table.ciInstallationId, table.githubRunId),
+  ],
+);

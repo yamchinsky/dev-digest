@@ -149,6 +149,11 @@ The repo root has a minimal `package.json` (just the `verify:l06` script) but is
 
 ## Recurring Errors & Fixes
 
+### Parallel worktree branches both mint the same `SPEC-NN` — the "global sequence" convention has no allocator, so merges collide
+_2026-07-10_ · `specs/README.md`, `specs/SPEC-NN-*.md` headers, `docs/plans/*.md` spec refs
+
+`specs/README.md` declares `NN` a **global** sequence across all `specs/` folders, but nothing enforces it: two worktree branches developed in parallel (Multi-Agent Review, Export to CI) each independently allocated `SPEC-05`, both wrote a `SPEC-05-*.md` file, and the merge produced a real number collision (not just a text conflict in the index). Resolving it means picking a loser and renumbering it end-to-end: `git mv` the spec file, edit the `Spec ID: SPEC-NN` line inside it, fix the `**Spec:** SPEC-NN (path)` ref in its `docs/plans/<feature>.md`, and correct the index line — grep `SPEC-05` repo-wide (excluding `node_modules`/`server/clones`) to catch every ref before committing. Prevention: when starting a spec on a fresh branch, reserve the next number by checking `origin`'s `specs/` too, not just the local tree; the newer/later-merged feature is the natural one to bump.
+
 ### `git add <file> && git commit --amend` commits the ENTIRE index — pre-staged files from another terminal ride along
 _2026-07-05_ · `repo-wide` (git tooling; bit us on `feat/evals-ci`)
 

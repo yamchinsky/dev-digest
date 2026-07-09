@@ -140,6 +140,15 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/** A GitHub Actions workflow run (minimal shape for CI sync). */
+export interface WorkflowRun {
+  id: string;
+  status: string;
+  conclusion: string | null;
+  html_url: string;
+  created_at: string;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -164,6 +173,16 @@ export interface GitHubClient {
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
+  /**
+   * List completed workflow runs for `workflowFile` (e.g. "devdigest-review.yml").
+   * Returns runs in most-recent-first order (up to 50 per call).
+   */
+  listWorkflowRuns(repo: RepoRef, workflowFile: string): Promise<WorkflowRun[]>;
+  /**
+   * Download the named artifact from a workflow run, unzip it, and return the
+   * JSON string of the first JSON file found inside the archive.
+   */
+  downloadArtifact(repo: RepoRef, runId: string, artifactName: string): Promise<string>;
 }
 
 // ---------- Git (simple-git, heavy) ----------

@@ -111,6 +111,11 @@ _2026-07-09_ · `client/src/app/repos/[repoId]/pulls/[number]/_components/RunRev
 
 Calling `vi.doMock("@/lib/hooks/agents", …)` inside an `it()` after the component was already statically imported does nothing — the binding is fixed at import time, so the test silently runs against the module-level `vi.mock` and asserts the wrong branch (an "empty agents" test actually ran with two agents and still passed). The coverage gate flagged it as passing-but-ineffective. Use a module-level `vi.mock` factory delegating to a `vi.fn()` and switch behaviour per-test with `mockReturnValue`.
 
+### next-intl `t()` rejects a computed/template key — it types the argument off a literal union of message paths
+_2026-07-09_ · `client/src/app/ci-runs/_components/CiRunsPage`
+
+`useTranslations()`'s `t()` types its argument as the literal union of keys in the namespace JSON, so a dynamic key like `t(`runs.status.${status}`)` fails `tsc` (and would defeat tree-shaking anyway). Map the dynamic value to a literal key explicitly — a small `switch`/lookup that calls `t('runs.status.passed')`, `t('runs.status.failed')`, … per branch. Applies to any status/enum you render through i18n.
+
 ## Recurring Errors & Fixes
 
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages

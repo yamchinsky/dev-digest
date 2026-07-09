@@ -196,7 +196,8 @@ export type CiInstallation = z.infer<typeof CiInstallation>;
 
 /** Response of `POST /agents/:id/export-ci`. */
 export const CiExport = z.object({
-  installation: CiInstallation,
+  /** null when action='files' (no PR opened, no installation persisted). */
+  installation: CiInstallation.nullable(),
   files: z.array(CiFile),
   pr_url: z.string().nullable(),
 });
@@ -218,6 +219,11 @@ export const CiRun = z.object({
   source: z.string().nullable(),
   agent: z.string().nullish(),
   duration_s: z.number().nullish(),
+  // AC-33: new fields populated from CI artifact during sync
+  github_run_id: z.string().nullish(),
+  critical: z.number().int().nullish(),
+  warning: z.number().int().nullish(),
+  suggestion: z.number().int().nullish(),
 });
 export type CiRun = z.infer<typeof CiRun>;
 

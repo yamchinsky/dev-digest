@@ -37,6 +37,7 @@ Conventions:
 - [SPEC-03 — PR Why + Risk Brief](SPEC-03-2026-07-pr-why-risk-brief.md) — one-LLM-call synthesis of intent, blast, and smart-diff into a grounded what/why/risk brief with a ranked reading-focus list, surfaced above the Overview tab cards (implemented)
 - [SPEC-04 — Eval Pipeline](SPEC-04-2026-07-eval-pipeline.md) — freeze real accept/dismiss decisions as eval cases, batch-run them through a snapshotted agent config, and score recall/precision/citation_accuracy with zero LLM calls (implemented)
 - [SPEC-05 — Multi-Agent Review (Worktree A)](SPEC-05-2026-07-multi-agent-review-worktree-a.md) — agent-picker, Configure run page with pre-run estimates, results page with Columns/Tabs views, cross-agent finding grouping, and a multi-run carried as a run-id set in the URL (no new table) (implemented)
+- [SPEC-06 — Export to CI](SPEC-06-2026-07-export-to-ci.md) — deploy a tuned agent to GitHub Actions via a 4-step wizard that generates a self-contained, security-reviewed bundle and opens a PR; ingest results back into the studio via GitHub artifact pull (implemented)
 
 Link new files from `AGENTS.md` via the `Read … when …` block so they
 actually get read.

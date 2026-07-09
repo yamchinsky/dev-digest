@@ -39,6 +39,16 @@ _2026-07-02_ · `server/src/modules/reviews/run-executor.ts:297`
 
 SPEC-01 AC-16 says a missing attached doc "SHALL log a `warn` entry", but the run-log entry is emitted via `runLog.info(`[warn] Context doc missing: …`)` — the structured `kind` field stays `"info"`; the warn-ness lives only in the message text. Any test or log filter that matches `kind === "warn"` finds nothing (bit me during live AC-16 verification — filter by msg substring instead). If a real `runLog.warn` level ever lands, migrate this call; until then, assert on the message prefix, not the kind.
 
+### `*.it.test.ts` silently skip — looking green — when a COLD `docker info` exceeds the 5s `dockerAvailable()` timeout
+_2026-07-09_ · `server/test/helpers/pg.ts:23`
+
+`dockerAvailable()` runs `execSync('docker info', { timeout: 5000 })`. On a cold daemon `docker info` can take ~5.7s and time out, so the helper returns false and the whole suite reports "N skipped" — indistinguishable at a glance from "passed", a false-pass trap that let 4 genuinely-failing CI it-tests hide as green across two implementer sandboxes. A warm `docker info` is ~1.1s. Before trusting an it-test run, warm the daemon (`docker info` twice) and immediately invoke vitest so the in-test check lands inside the warm window; then confirm the summary says "passed", not "skipped".
+
+### The CI export it-tests false-pass locally on a gitignored agent-runner bundle that is absent in CI
+_2026-07-09_ · `server/src/modules/ci/ci.it.test.ts`, `server/src/modules/ci/service.ts` (`buildRunnerFile`)
+
+`action='open_pr'` reads `agent-runner/dist/index.js` off disk and throws `ConfigError` (→ 500) when it's missing. That bundle is ncc-built and re-ignored by `agent-runner/.gitignore`, so it is NEVER committed and is absent in CI (`server-integration.yml` does not build it) — yet a dev build sits in `agent-runner/dist/` locally, so `ci.it.test.ts` passed on my machine and 500'd in CI. One missing file cascaded into 5 red tests: AC-9/10, AC-11, AC-13 directly (open_pr 500 before `commitFiles` even ran, so AC-13 saw 500 not the 502 it expected), and AC-23/AC-26 indirectly (their `setupInstallation` helper calls open_pr → no installation row → `syncCiRuns` iterates 0 installations → `synced=0`/200 instead of ≥1/502). Same false-pass class as the docker-warm entry above but a different trigger — the fix is for the test to self-provision the artifact (create a stub bundle when absent, remove only what it created so a real local build is untouched); do NOT relax the production `ConfigError` guard and do NOT add an ncc build to CI (no assertion inspects bundle content). Any it-test whose success depends on a sibling package's uncommitted build output will false-pass locally and fail in CI.
+
 ## Codebase Patterns
 
 ### Zod `response` schemas are ENFORCED at runtime by serializerCompiler — they gate persisted-jsonb shape drift
@@ -115,6 +125,11 @@ Writing `{ file: 'a.ts', ...overrides }` where `overrides` may also carry `file`
 _2026-07-09_ · `server/src/modules/agents/repository.ts` (`lastDoneRunsPerAgent`)
 
 `inArray(col, ids)` needs an ORM-mapped column reference and can't target the output of a raw window-function subquery. For a last-N-per-group query (`ROW_NUMBER() OVER (PARTITION BY agent_id ORDER BY ran_at DESC)` filtered to `rn <= 3`) written as `db.execute(sql\`…\`)`, pass the id list as `= ANY(ARRAY[${sql.join(ids.map(id => sql\`${id}\`), sql\`, \`)}]::uuid[])` — the `::uuid[]` cast is required or Postgres rejects the text-vs-uuid comparison. Pairs with the empty-array note above: guard `ids.length === 0` before building the clause.
+
+### Drizzle `onConflictDoUpdate({ target })` throws at runtime if the target columns lack a UNIQUE index
+_2026-07-09_ · `server/src/modules/ci/repository.ts`
+
+`onConflictDoUpdate` / `onConflictDoNothing` with an explicit `target: [colA, colB]` typechecks fine but Postgres rejects it at runtime — `"there is no unique or exclusion constraint matching the ON CONFLICT specification"` — unless those columns carry a matching DB-level UNIQUE index. `ci_installations(agent_id, repo, target_type)` had none, so every `open_pr` export threw 500 and cascaded into 4 red it-tests, all under a green typecheck. Either add the unique index in the migration, or fall back to a select-then-insert/update in the repository. Never infer `target` validity from a passing `tsc`.
 
 ## Recurring Errors & Fixes
 

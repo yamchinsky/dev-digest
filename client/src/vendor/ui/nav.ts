@@ -31,6 +31,12 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    section: "GLOBAL",
+    items: [
+      { key: "ci-runs", label: "CI Runs", icon: "GitBranch", href: "/ci-runs", gKey: "r" },
+    ],
+  },
+  {
     section: "SKILLS LAB",
     items: [
       { key: "skills", label: "Skills", icon: "Sparkles", href: "/skills", gKey: "k" },
