@@ -91,6 +91,11 @@ _2026-07-05_ · `EvalsTab.test.tsx` and any test rendering a `charts/` component
 
 jsdom has no layout engine, so `ResponsiveContainer` measures 0×0 and warns on every render; assertions still pass and the stubbed `ResizeObserver` in `src/test/setup.ts` doesn't silence it. Treat the warning as noise, not a broken test. The only real silencer is mocking `recharts` in test setup — do that only if the noise starts hiding real failures.
 
+### next-intl `t()` rejects a computed/template key — it types the argument off a literal union of message paths
+_2026-07-09_ · `client/src/app/ci-runs/_components/CiRunsPage`
+
+`useTranslations()`'s `t()` types its argument as the literal union of keys in the namespace JSON, so a dynamic key like `t(`runs.status.${status}`)` fails `tsc` (and would defeat tree-shaking anyway). Map the dynamic value to a literal key explicitly — a small `switch`/lookup that calls `t('runs.status.passed')`, `t('runs.status.failed')`, … per branch. Applies to any status/enum you render through i18n.
+
 ## Recurring Errors & Fixes
 
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages

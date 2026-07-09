@@ -113,6 +113,13 @@
       "when": 1783544267732,
       "tag": "0015_heavy_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783575210323,
+      "tag": "0016_stormy_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

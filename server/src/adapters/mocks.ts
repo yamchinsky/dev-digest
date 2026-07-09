@@ -17,6 +17,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  WorkflowRun,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -125,6 +126,10 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Workflow runs returned by listWorkflowRuns. */
+  workflowRuns?: WorkflowRun[];
+  /** JSON string returned by downloadArtifact. */
+  artifactJson?: string;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -236,6 +241,18 @@ export class MockGitHubClient implements GitHubClient {
 
   async currentLogin(): Promise<string> {
     return this.opts.login ?? 'mock-user';
+  }
+
+  async listWorkflowRuns(_repo: RepoRef, _workflowFile: string): Promise<WorkflowRun[]> {
+    return this.opts.workflowRuns ?? [];
+  }
+
+  async downloadArtifact(
+    _repo: RepoRef,
+    _runId: string,
+    _artifactName: string,
+  ): Promise<string> {
+    return this.opts.artifactJson ?? '{}';
   }
 }
 
