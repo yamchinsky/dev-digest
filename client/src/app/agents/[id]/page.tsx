@@ -11,8 +11,11 @@ import { AgentCard } from "../_components/AgentCard";
 import { AgentEditor } from "./_components/AgentEditor";
 import { useAgents, useAgent, useUpdateAgent } from "@/lib/hooks/agents";
 import { ApiError } from "@/services/api";
+import { TABS } from "./_components/AgentEditor/constants";
 
-const VALID_TABS = ["config", "skills", "context", "evals"];
+// Derived from the editor's tab registry — a tab added there is reachable
+// via ?tab= automatically (this whitelist silently drifted three times).
+const VALID_TABS = TABS.map((t) => t.key);
 
 export default function AgentEditorPage() {
   const params = useParams<{ id: string }>();
