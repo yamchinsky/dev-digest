@@ -291,6 +291,9 @@ export type IndexStatus = z.infer<typeof IndexStatus>;
 export const RunRequest = z.object({
   agentId: z.string().optional(),
   all: z.boolean().optional(),
+  /** Run a specific subset of agents by id. Non-empty when present; takes
+   *  precedence over `all`. */
+  agentIds: z.array(z.string().uuid()).nonempty().optional(),
 });
 export type RunRequest = z.infer<typeof RunRequest>;
 

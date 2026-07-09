@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { AgentContextDoc, CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -264,6 +264,61 @@ export class AgentsRepository {
       .where(eq(t.agentContextDocs.agentId, agentId))
       .orderBy(asc(t.agentContextDocs.order));
     return rows.map((r) => ({ repoId: r.repoId, relativePath: r.relativePath, order: r.order }));
+  }
+
+  /**
+   * Return the last 3 `status='done'` `agent_runs` rows for EACH agent in
+   * `agentIds` that belongs to `workspaceId`. Uses a single SQL query with a
+   * ROW_NUMBER() window function — NOT N+1 per agent.
+   *
+   * Returns an array of rows, at most 3 per agent id. Each row carries the
+   * agent_id, duration_ms, tokens_in, tokens_out, and model needed for the
+   * estimate computation.
+   */
+  async lastDoneRunsPerAgent(
+    workspaceId: string,
+    agentIds: string[],
+  ): Promise<
+    Array<{
+      agentId: string | null;
+      durationMs: number | null;
+      tokensIn: number | null;
+      tokensOut: number | null;
+      model: string | null;
+    }>
+  > {
+    if (agentIds.length === 0) return [];
+
+    // Build a parameterised ANY($n) array via Drizzle's sql template tag.
+    // agentIds are internal UUIDs but we still use parameterised SQL to keep
+    // consistent with the rest of the codebase's injection-safe pattern.
+    const rows = await this.db.execute(sql`
+      SELECT agent_id AS "agentId",
+             duration_ms AS "durationMs",
+             tokens_in AS "tokensIn",
+             tokens_out AS "tokensOut",
+             model
+      FROM (
+        SELECT agent_id, duration_ms, tokens_in, tokens_out, model,
+               ROW_NUMBER() OVER (PARTITION BY agent_id ORDER BY ran_at DESC) AS rn
+        FROM agent_runs
+        WHERE workspace_id = ${workspaceId}
+          AND status = 'done'
+          AND agent_id = ANY(${sql`ARRAY[${sql.join(
+            agentIds.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )}]`})
+      ) ranked
+      WHERE rn <= 3
+    `);
+
+    return (rows as Array<Record<string, unknown>>).map((r) => ({
+      agentId: (r['agentId'] as string | null) ?? null,
+      durationMs: (r['durationMs'] as number | null) ?? null,
+      tokensIn: (r['tokensIn'] as number | null) ?? null,
+      tokensOut: (r['tokensOut'] as number | null) ?? null,
+      model: (r['model'] as string | null) ?? null,
+    }));
   }
 
   /**

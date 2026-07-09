@@ -273,6 +273,14 @@ export const Agent = z.object({
   // Inject repo-intel context (repo skeleton + callers + rank note) into this
   // agent's review prompt. Default on; gated again by the global flag.
   repo_intel: z.boolean().default(true),
+  /** Pre-run estimate computed from the agent's last 3 done runs.
+   *  Optional so old cached responses (without the field) still validate. */
+  estimate: z
+    .object({
+      duration_avg_ms: z.number().nullable(),
+      cost_avg_usd: z.number().nullable(),
+    })
+    .optional(),
 });
 export type Agent = z.infer<typeof Agent>;
 

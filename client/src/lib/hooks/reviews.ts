@@ -135,6 +135,24 @@ export function useRunReview() {
   });
 }
 
+// ---- Run a multi-agent review (specific subset of agents) ----
+export interface RunMultiAgentReviewInput {
+  prId: string;
+  agentIds: string[];
+}
+
+/** Post `agentIds` to the review endpoint; leaves `useRunReview` untouched. */
+export function useRunMultiAgentReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ prId, agentIds }: RunMultiAgentReviewInput) =>
+      api.post<ReviewRunResponse>(`/pulls/${prId}/review`, { agentIds }),
+    onSuccess: (_d, { prId }) => {
+      qc.invalidateQueries({ queryKey: ["reviews", prId] });
+    },
+  });
+}
+
 // ---- Finding actions (accept/dismiss) ----
 export function useFindingAction() {
   const qc = useQueryClient();
