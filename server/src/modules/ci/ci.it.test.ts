@@ -15,6 +15,9 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { access, mkdir, writeFile, rm } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { startPg, dockerAvailable, type PgFixture } from '../../../test/helpers/pg.js';
 import { buildApp } from '../../app.js';
 import { loadConfig } from '../../platform/config.js';
@@ -32,6 +35,49 @@ if (!hasDocker) {
   // eslint-disable-next-line no-console
   console.warn('[ci] Docker not available — skipping integration tests.');
 }
+
+// ---------------------------------------------------------------------------
+// Runner-bundle fixture
+//
+// `action='open_pr'` requires the agent-runner bundle to exist on disk —
+// service.ts::buildRunnerFile throws ConfigError (→ 500) otherwise. That bundle
+// is ncc-built and .gitignored, so it is NEVER committed and is ABSENT in CI.
+// Without this fixture every open_pr-dependent test 500s in CI while passing
+// locally (where a dev build sits in agent-runner/dist/) — a false pass.
+//
+// Path mirrors service.ts::resolveRunnerBundlePath (server/src/modules/ci ->
+// repo-root/agent-runner/dist/index.js). We only create a stub when none is
+// present, and remove ONLY what we created, so a real local build is untouched.
+// ---------------------------------------------------------------------------
+const runnerBundlePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  '..',
+  'agent-runner',
+  'dist',
+  'index.js',
+);
+let createdBundleStub = false;
+
+beforeAll(async () => {
+  if (!hasDocker) return;
+  try {
+    await access(runnerBundlePath);
+  } catch {
+    await mkdir(dirname(runnerBundlePath), { recursive: true });
+    await writeFile(runnerBundlePath, '// test stub — agent-runner bundle\n', 'utf-8');
+    createdBundleStub = true;
+  }
+});
+
+afterAll(async () => {
+  if (createdBundleStub) {
+    await rm(runnerBundlePath, { force: true });
+    createdBundleStub = false;
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Fixtures
