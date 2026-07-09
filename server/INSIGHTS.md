@@ -44,6 +44,11 @@ _2026-07-09_ · `server/test/helpers/pg.ts:23`
 
 `dockerAvailable()` runs `execSync('docker info', { timeout: 5000 })`. On a cold daemon `docker info` can take ~5.7s and time out, so the helper returns false and the whole suite reports "N skipped" — indistinguishable at a glance from "passed", a false-pass trap that let 4 genuinely-failing CI it-tests hide as green across two implementer sandboxes. A warm `docker info` is ~1.1s. Before trusting an it-test run, warm the daemon (`docker info` twice) and immediately invoke vitest so the in-test check lands inside the warm window; then confirm the summary says "passed", not "skipped".
 
+### The CI export it-tests false-pass locally on a gitignored agent-runner bundle that is absent in CI
+_2026-07-09_ · `server/src/modules/ci/ci.it.test.ts`, `server/src/modules/ci/service.ts` (`buildRunnerFile`)
+
+`action='open_pr'` reads `agent-runner/dist/index.js` off disk and throws `ConfigError` (→ 500) when it's missing. That bundle is ncc-built and re-ignored by `agent-runner/.gitignore`, so it is NEVER committed and is absent in CI (`server-integration.yml` does not build it) — yet a dev build sits in `agent-runner/dist/` locally, so `ci.it.test.ts` passed on my machine and 500'd in CI. One missing file cascaded into 5 red tests: AC-9/10, AC-11, AC-13 directly (open_pr 500 before `commitFiles` even ran, so AC-13 saw 500 not the 502 it expected), and AC-23/AC-26 indirectly (their `setupInstallation` helper calls open_pr → no installation row → `syncCiRuns` iterates 0 installations → `synced=0`/200 instead of ≥1/502). Same false-pass class as the docker-warm entry above but a different trigger — the fix is for the test to self-provision the artifact (create a stub bundle when absent, remove only what it created so a real local build is untouched); do NOT relax the production `ConfigError` guard and do NOT add an ncc build to CI (no assertion inspects bundle content). Any it-test whose success depends on a sibling package's uncommitted build output will false-pass locally and fail in CI.
+
 ## Codebase Patterns
 
 ### Zod `response` schemas are ENFORCED at runtime by serializerCompiler — they gate persisted-jsonb shape drift
