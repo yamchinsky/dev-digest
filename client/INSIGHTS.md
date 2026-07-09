@@ -118,6 +118,11 @@ _2026-07-09_ · `client/src/app/ci-runs/_components/CiRunsPage`
 
 ## Recurring Errors & Fixes
 
+### A body-less `api.post()` against a route with `body: z.object({})` 422s — bit twice (#31, CI Runs Refresh)
+_2026-07-10_ · `src/lib/hooks/ci.ts` `useSyncCiRuns` vs `server/src/modules/ci/routes.ts` `POST /ci-runs/sync`
+
+`api.post(path)` without a body intentionally sends no JSON body and no content-type (the helper comment even lists "refresh" as a body-less example) — that is fine ONLY for routes with no body schema. A route that declares `body: z.object({})` receives `null` and 422s ("Expected object, received null"), which surfaces as a mutation error toast ("Request validation failed") with no console error. Bit `useCreateEvalCaseFromFinding` (#31) and now `useSyncCiRuns` (CI Runs Refresh button). Rule: if the server route declares ANY body schema — even the empty object — the hook must pass `{}` explicitly. When adding a POST hook, check the route's `body:` schema first.
+
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages
 _2026-06-18_ · see repo-root `INSIGHTS.md` → Recurring Errors & Fixes (cross-module; concrete client bite was `RunTraceDrawer.test.tsx:10`)
 
@@ -145,6 +150,11 @@ The Export-to-CI worktree shipped `CiTab` + `ExportWizard` fully tested, but nev
 _2026-07-10_ · `src/app/ci-runs/_components/CiRunsPage` vs `server/src/modules/ci/routes.ts` `CiRunsQuery.since`
 
 `CiRunsPage` sent its UI window token (`since=7d`) straight to `GET /ci-runs`, whose schema is `z.string().datetime({ offset: true })` → 422 on every load. Two policies make this invisible: query-side 4xx errors don't toast (by design), and the page only branches on `isLoading`/empty — so a failing query renders as a plausible "no runs yet" empty state forever. The component test asserted `filters.since === "7d"` against a mocked hooks layer, so it *protected the bug*: jsdom tests that mock `@/lib/hooks/*` verify UI→hook wiring only, never the wire format — cross-check any new query param against the route's Zod schema by hand (or hit the live route once). Convert UI tokens to contract values at the page/hook boundary (`useMemo` → ISO string). Curl-repro gotcha: an unencoded `+00:00` offset in a query string decodes as a space and 422s even when the value is valid — test with the `Z` suffix or `--data-urlencode`.
+
+### Phantom `POST /graphql 404` spam in the Next dev console comes from the Apollo Client Devtools extension
+_2026-07-10_ · Next dev console (port 3000); no graphql anywhere in the repo
+
+Bursts of `POST /graphql 404` right after a page load look like an app bug but are the Apollo Client Devtools Chrome extension probing every page for a GraphQL endpoint. Diagnosis path that settles it: `grep -ri graphql` over the repo (zero hits in code), `lsof -nP -i :3000` (only Chrome connections), and the burst-on-tab-reload timing. Verify by opening the studio in incognito (extensions off) — the spam disappears. Harmless noise; disable the extension for localhost if it bothers.
 
 ## Session Notes
 _None yet._

@@ -92,7 +92,9 @@ export function useCiRuns(filters: CiRunsFilters = {}, options: CiRunsOptions = 
 export function useSyncCiRuns() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post<{ synced: number }>("/ci-runs/sync"),
+    // The route schema is `body: z.object({})` — an omitted body arrives as
+    // null and 422s (same bug class as #31: send {}, not undefined).
+    mutationFn: () => api.post<{ synced: number }>("/ci-runs/sync", {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ci-runs"] });
     },
