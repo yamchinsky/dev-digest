@@ -42,6 +42,12 @@ export function usePrRuns(prId: string | null | undefined) {
     queryKey: ["pr-runs", prId],
     queryFn: () => api.get<RunSummary[]>(`/pulls/${prId}/runs`),
     enabled: !!prId,
+    // "always": run state is hot data. The PR page fills this cache moments
+    // before the picker redirects to the results page — with the default 30s
+    // staleTime the results page mounted onto a FRESH-looking list without
+    // the new runs, and since nothing in it was "running", the interval below
+    // stayed off too. Frozen page until manual reload.
+    refetchOnMount: "always",
     refetchInterval: (query) =>
       (query.state.data ?? []).some((r) => r.status === "running") ? 4000 : false,
   });
@@ -131,6 +137,8 @@ export function useRunReview() {
       }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      // The new runs must show up wherever pr-runs is already cached.
+      qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
     },
   });
 }
@@ -149,6 +157,10 @@ export function useRunMultiAgentReview() {
       api.post<ReviewRunResponse>(`/pulls/${prId}/review`, { agentIds }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      // Invalidate pr-runs BEFORE the picker redirects to the results page —
+      // otherwise the results page mounts onto a fresh-looking (<30s) cached
+      // list without the new runs and never starts polling.
+      qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
     },
   });
 }
