@@ -21,26 +21,90 @@ const inflateRawAsync = promisify(inflateRaw);
 
 /**
  * Parse a ZIP archive buffer and return the string contents of the first JSON
- * file found inside. Uses a minimal ZIP local file header parser — sufficient
- * for single-file artifacts produced by GitHub Actions.
+ * file found inside.
  *
- * ZIP local file entry layout (little-endian):
- *   4  — signature (0x04034b50)
- *   2  — version needed
- *   2  — general purpose bit flag
- *   2  — compression method (0 = stored, 8 = deflate)
- *   2  — last mod file time
- *   2  — last mod file date
- *   4  — crc-32
- *   4  — compressed size
- *   4  — uncompressed size
- *   2  — file name length
- *   2  — extra field length
- *   n  — file name
- *   m  — extra field
- *   k  — file data
+ * Sizes are read from the CENTRAL DIRECTORY, not the local file headers:
+ * `actions/upload-artifact@v4` writes streaming zips with general-purpose
+ * bit 3 set, so the local header carries `compressed size = 0` and the real
+ * size lives only in the data descriptor / central directory. The original
+ * local-header walk sliced 0 bytes and inflate died with "unexpected end of
+ * file" on every real GitHub artifact. The local-header walk is kept as a
+ * fallback for descriptor-less zips with a missing/corrupt central directory.
  */
-async function unzipFirstJson(buffer: Buffer): Promise<string> {
+export async function unzipFirstJson(buffer: Buffer): Promise<string> {
+  const entry = await unzipViaCentralDirectory(buffer);
+  if (entry !== null) return entry;
+  const legacy = await unzipViaLocalHeaders(buffer);
+  if (legacy !== null) return legacy;
+  throw new Error('unzipFirstJson: no valid JSON file found in ZIP archive');
+}
+
+/** Decompress one entry given exact method + compressed size. */
+async function readEntry(
+  buffer: Buffer,
+  localHeaderOffset: number,
+  method: number,
+  compressedSize: number,
+): Promise<string | null> {
+  // The LOCAL header's name/extra lengths differ from the central ones —
+  // re-read them at the entry itself to find where the data starts.
+  if (localHeaderOffset + 30 > buffer.length) return null;
+  if (buffer.readUInt32LE(localHeaderOffset) !== 0x04034b50) return null;
+  const nameLen = buffer.readUInt16LE(localHeaderOffset + 26);
+  const extraLen = buffer.readUInt16LE(localHeaderOffset + 28);
+  const dataOffset = localHeaderOffset + 30 + nameLen + extraLen;
+  const data = buffer.subarray(dataOffset, dataOffset + compressedSize);
+
+  if (method === 0) return data.toString('utf8'); // STORED
+  if (method === 8) return (await inflateRawAsync(data)).toString('utf8'); // DEFLATED
+  return null; // unknown compression
+}
+
+/** Authoritative path: walk the central directory (works for streaming zips). */
+async function unzipViaCentralDirectory(buffer: Buffer): Promise<string | null> {
+  // End-of-central-directory record: signature 0x06054b50, min 22 bytes,
+  // trailed by a comment of up to 64 KiB — scan backwards for it.
+  const EOCD_SIG = 0x06054b50;
+  const CEN_SIG = 0x02014b50;
+  let eocd = -1;
+  const scanFloor = Math.max(0, buffer.length - 22 - 65_535);
+  for (let i = buffer.length - 22; i >= scanFloor; i--) {
+    if (buffer.readUInt32LE(i) === EOCD_SIG) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return null;
+
+  const entryCount = buffer.readUInt16LE(eocd + 10);
+  let offset = buffer.readUInt32LE(eocd + 16); // central directory start
+
+  for (let n = 0; n < entryCount && offset + 46 <= buffer.length; n++) {
+    if (buffer.readUInt32LE(offset) !== CEN_SIG) break;
+    const method = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const nameLen = buffer.readUInt16LE(offset + 28);
+    const extraLen = buffer.readUInt16LE(offset + 30);
+    const commentLen = buffer.readUInt16LE(offset + 32);
+    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
+
+    try {
+      const content = await readEntry(buffer, localHeaderOffset, method, compressedSize);
+      if (content !== null) {
+        JSON.parse(content);
+        return content;
+      }
+    } catch {
+      // Not valid JSON / bad entry — try the next one.
+    }
+
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return null;
+}
+
+/** Fallback: walk local file headers (descriptor-less zips only). */
+async function unzipViaLocalHeaders(buffer: Buffer): Promise<string | null> {
   const LOCAL_FILE_SIG = 0x04034b50;
   let offset = 0;
 
@@ -53,34 +117,20 @@ async function unzipFirstJson(buffer: Buffer): Promise<string> {
     const fileNameLen = buffer.readUInt16LE(offset + 26);
     const extraLen = buffer.readUInt16LE(offset + 28);
     const dataOffset = offset + 30 + fileNameLen + extraLen;
-    const compressedData = buffer.subarray(dataOffset, dataOffset + compressedSize);
 
-    let content: string;
-    if (method === 0) {
-      // STORED
-      content = compressedData.toString('utf8');
-    } else if (method === 8) {
-      // DEFLATED
-      const decompressed = await inflateRawAsync(compressedData);
-      content = decompressed.toString('utf8');
-    } else {
-      // Unknown compression — skip entry
-      offset = dataOffset + compressedSize;
-      continue;
-    }
-
-    // Return the first JSON-parseable entry
     try {
-      JSON.parse(content);
-      return content;
+      const content = await readEntry(buffer, offset, method, compressedSize);
+      if (content !== null) {
+        JSON.parse(content);
+        return content;
+      }
     } catch {
-      // Not valid JSON — try next entry
+      // Not valid JSON / truncated — try the next entry.
     }
 
     offset = dataOffset + compressedSize;
   }
-
-  throw new Error('unzipFirstJson: no valid JSON file found in ZIP archive');
+  return null;
 }
 
 const TIMEOUT = 30_000;

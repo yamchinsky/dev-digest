@@ -23,3 +23,11 @@ export const MEMORY_PATH = '.devdigest/memory.jsonl';
 
 /** Name of the GitHub Actions artifact uploaded by the runner. */
 export const RESULT_ARTIFACT_NAME = 'devdigest-result';
+
+/**
+ * Repo-root-relative path of the result JSON the runner writes and the
+ * workflow uploads. Pinned on BOTH sides (runner env DEVDIGEST_RESULT_PATH +
+ * upload-artifact path) — they silently diverged once and `if-no-files-found`
+ * swallowed it, so no artifact ever reached the ingest.
+ */
+export const RESULT_FILE_PATH = 'devdigest-result.json';

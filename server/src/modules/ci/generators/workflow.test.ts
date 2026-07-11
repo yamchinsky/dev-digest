@@ -87,4 +87,18 @@ describe('generateWorkflowYaml', () => {
     const wfWithBase = parse(generateWorkflowYaml({ triggers: ['opened'], postAs: 'bot' }));
     expect(wfWithBase.jobs.review.env['BASE_BRANCH']).toBe('main');
   });
+
+  it('result path is pinned identically on both sides: runner env DEVDIGEST_RESULT_PATH === upload-artifact path', () => {
+    // These two silently diverged once (runner wrote devdigest-result.json at
+    // repo root, upload read .devdigest/result.json) and if-no-files-found
+    // swallowed it — no artifact, nothing for /ci-runs/sync to ingest.
+    const wf = parse(generateWorkflowYaml(defaultOpts));
+    const envPath = wf.jobs.review.env['DEVDIGEST_RESULT_PATH'];
+    const steps: Array<{ uses?: string; with?: Record<string, string> }> = wf.jobs.review.steps;
+    const upload = steps.find((s) => s.uses?.startsWith('actions/upload-artifact'));
+    expect(envPath).toBeTruthy();
+    expect(upload?.with?.path).toBe(envPath);
+    expect(upload?.with?.name).toBe('devdigest-result');
+    expect(upload?.with?.['if-no-files-found']).toBe('warn');
+  });
 });

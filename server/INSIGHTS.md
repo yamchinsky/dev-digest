@@ -148,6 +148,16 @@ with backfill, or accept the widened type — do not `row.prId!` past tsc.
 ### Adding a required field to a shared Zod contract rots inline test fixtures in both packages
 _2026-06-18_ · see repo-root `INSIGHTS.md` → Recurring Errors & Fixes
 
+### The runner's result path and the workflow's upload path diverged — and `if-no-files-found: ignore` made it invisible
+_2026-07-11_ · `server/src/modules/ci/generators/workflow.ts` vs `agent-runner/src/index.ts:32`; first live deploy to devwatch-nest
+
+The agent-runner writes its result to `DEVDIGEST_RESULT_PATH ?? <cwd>/devdigest-result.json`, but the generated workflow uploaded `.devdigest/result.json` — so the very first real CI deploy posted review comments fine (runner worked, exit 1 by design on blockers) yet produced NO artifact, and `/ci-runs/sync` silently skipped every run (missing artifact → `continue`). Nothing failed loudly at any layer: `if-no-files-found: ignore` swallowed the missing file, sync returns 200 with `synced: 0`, and the CI Runs page shows a plausible empty state. Unit tests never asserted the path pair. Fix: `RESULT_FILE_PATH` constant pinned on BOTH sides of the workflow (runner env + upload path), `if-no-files-found: warn`, and a test asserting env pin === upload path. Lesson: when producer and consumer of a file live in different packages, pin the path through ONE constant and test the pair — and never pair a cross-package contract with a silencing option like `ignore`.
+
+### GitHub Actions artifact zips are STREAMING zips — the local file header lies (`compressed size = 0`)
+_2026-07-11_ · `server/src/adapters/github/octokit.ts` `unzipFirstJson`; live repro on devwatch-nest run 29148717630
+
+`actions/upload-artifact@v4` writes zips with general-purpose bit 3 (data descriptor): the LOCAL header carries `csize=0/usize=0` and the real sizes live only in the data descriptor / central directory. The hand-rolled unzip walked local headers, sliced `0` bytes and died in zlib with "unexpected end of file" — on EVERY real artifact, while unit tests passed (they never used a streaming fixture). Combined with `syncCiRuns`'s skip-on-download-error policy the result was a clean `200 {"synced":0}`. Fixed by reading sizes from the central directory (EOCD → CEN walk) with the local-header walk as fallback; regression test uses the REAL 298-byte GitHub artifact as a base64 fixture and asserts `csize=0` in its local header. Lesson: zip fixtures made with `zipfile`/`yazl` defaults do NOT cover GitHub-produced archives — pin a real one.
+
 ## Session Notes
 _None yet._
 

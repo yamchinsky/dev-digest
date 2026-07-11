@@ -1,5 +1,5 @@
 import { stringify } from 'yaml';
-import { RUNNER_PATH } from '../constants.js';
+import { RESULT_ARTIFACT_NAME, RESULT_FILE_PATH, RUNNER_PATH } from '../constants.js';
 
 export interface WorkflowOpts {
   /** PR event types that trigger the review (e.g. ['opened', 'synchronize', 'reopened']). */
@@ -52,6 +52,10 @@ export function generateWorkflowYaml(opts: WorkflowOpts): string {
           // Expose context env vars for the runner.
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}',
           BASE_BRANCH: base,
+          // Pin the runner's output to the SAME path the upload step reads —
+          // the runner's cwd default and the upload path diverged once, and
+          // `if-no-files-found` silently dropped the artifact.
+          DEVDIGEST_RESULT_PATH: RESULT_FILE_PATH,
         },
 
         steps: [
@@ -69,9 +73,11 @@ export function generateWorkflowYaml(opts: WorkflowOpts): string {
             uses: 'actions/upload-artifact@v4',
             if: 'always()',
             with: {
-              name: 'devdigest-result',
-              path: '.devdigest/result.json',
-              'if-no-files-found': 'ignore',
+              name: RESULT_ARTIFACT_NAME,
+              path: RESULT_FILE_PATH,
+              // 'warn' (not 'ignore'): a missing result file must at least
+              // leave a log trace — 'ignore' hid the path mismatch entirely.
+              'if-no-files-found': 'warn',
             },
           },
         ],
