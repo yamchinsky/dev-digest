@@ -158,6 +158,11 @@ _2026-07-11_ · `server/src/adapters/github/octokit.ts` `unzipFirstJson`; live r
 
 `actions/upload-artifact@v4` writes zips with general-purpose bit 3 (data descriptor): the LOCAL header carries `csize=0/usize=0` and the real sizes live only in the data descriptor / central directory. The hand-rolled unzip walked local headers, sliced `0` bytes and died in zlib with "unexpected end of file" — on EVERY real artifact, while unit tests passed (they never used a streaming fixture). Combined with `syncCiRuns`'s skip-on-download-error policy the result was a clean `200 {"synced":0}`. Fixed by reading sizes from the central directory (EOCD → CEN walk) with the local-header walk as fallback; regression test uses the REAL 298-byte GitHub artifact as a base64 fixture and asserts `csize=0` in its local header. Lesson: zip fixtures made with `zipfile`/`yazl` defaults do NOT cover GitHub-produced archives — pin a real one.
 
+### The run-executor executed agents SEQUENTIALLY while every product surface claims parallel fan-out
+_2026-07-11_ · `server/src/modules/reviews/run-executor.ts` `executeRuns`; exposed live on a 55-file PR
+
+The L07 lab handout, the multi-agent UI copy ("parallel fan-out"), and SPEC-05 all describe parallel execution — but `executeRuns` ran a `for … await` loop, one agent at a time. Nobody noticed for a whole lesson because ALL `agent_run` rows are created upfront with status `running` (so queued-but-not-started runs are indistinguishable from executing ones) and small PRs finish in ~18 s per agent. On a 55-file PR the illusion collapsed: agent 1 died in 5 s (429 on a `:free` model), agent 2 ground through minutes, agent 3 sat "running" with zero SSE events — the results page looked frozen. Fixed with `Promise.allSettled` over the per-agent closures (`runOneAgent` already isolates failures and `RunLogger.forRun` returns a NEW narrowed instance, so parallelism was safe all along). Two durable lessons: (1) "status=running" set at enqueue time hides scheduling bugs — if a queue exists, model a `queued` state or start rows lazily; (2) when a spec says "already works, just reuse", verify the claimed behavior with a log/timestamp check before building UI copy on top of it.
+
 ## Session Notes
 _None yet._
 
