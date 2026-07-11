@@ -94,6 +94,7 @@ function setupHooks({
   reviews = [] as ReviewRecord[],
   events = [] as RunEvent[],
   running = false,
+  refetchReviews = vi.fn(),
 } = {}) {
   vi.mocked(hooks.usePrRuns).mockReturnValue({
     data: runs,
@@ -105,7 +106,8 @@ function setupHooks({
     data: reviews,
     isLoading: false,
     error: null,
-  } as ReturnType<typeof hooks.usePrReviews>);
+    refetch: refetchReviews,
+  } as unknown as ReturnType<typeof hooks.usePrReviews>);
 
   vi.mocked(hooks.useRunEvents).mockReturnValue({ events, running });
 
@@ -113,6 +115,8 @@ function setupHooks({
     mutate: vi.fn(),
     isPending: false,
   } as unknown as ReturnType<typeof hooks.useFindingAction>);
+
+  return { refetchReviews };
 }
 
 const messages = {
@@ -127,6 +131,43 @@ function renderResults(prId: string, runIds: string[]) {
     </NextIntlClientProvider>,
   );
 }
+
+describe("ResultsPage — reviews re-pull on run completion", () => {
+  it("does NOT refetch reviews while all runs are still running", () => {
+    const { refetchReviews } = setupHooks({
+      runs: [makeRunSummary("run-1", "Security Reviewer", "running")],
+      reviews: [],
+    });
+    renderResults("pr-1", ["run-1"]);
+    expect(refetchReviews).not.toHaveBeenCalled();
+  });
+
+  it("refetches reviews when a run reaches a terminal state (findings arrive without a manual reload)", () => {
+    // Regression: usePrReviews has no auto-poll, so a run finishing after
+    // page load kept "0 findings" until the user reloaded the page.
+    const refetchReviews = vi.fn();
+    setupHooks({
+      runs: [makeRunSummary("run-1", "Security Reviewer", "running")],
+      reviews: [],
+      refetchReviews,
+    });
+    const { rerender } = renderResults("pr-1", ["run-1"]);
+    expect(refetchReviews).not.toHaveBeenCalled();
+
+    // The run lands: the next poll of usePrRuns reports it done.
+    setupHooks({
+      runs: [makeRunSummary("run-1", "Security Reviewer", "done")],
+      reviews: [],
+      refetchReviews,
+    });
+    rerender(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ResultsPage prId="pr-1" runIds={["run-1"]} />
+      </NextIntlClientProvider>,
+    );
+    expect(refetchReviews).toHaveBeenCalled();
+  });
+});
 
 describe("ResultsPage — Columns view (AC-7, AC-8, AC-23)", () => {
   beforeEach(() => {
