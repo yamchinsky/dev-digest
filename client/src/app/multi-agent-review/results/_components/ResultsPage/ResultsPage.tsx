@@ -54,7 +54,8 @@ export function ResultsPage({ prId, runIds }: ResultsPageProps) {
   const [activeTab, setActiveTab] = React.useState<string>(runIds[0] ?? "");
 
   const { data: allRuns } = usePrRuns(prId);
-  const { data: allReviews } = usePrReviews(prId);
+  const reviewsQuery = usePrReviews(prId);
+  const allReviews = reviewsQuery.data;
   const { events } = useRunEvents(runIds);
 
   // Filter runs and reviews to the URL run-id set
@@ -66,6 +67,19 @@ export function ResultsPage({ prId, runIds }: ResultsPageProps) {
 
   // Map runId → RunSummary for quick lookup
   const runById = new Map<string, RunSummary>(runs.map((r) => [r.run_id, r]));
+
+  // Findings and summaries live in the reviews query, which has NO auto-poll —
+  // without this, a run that finishes after page load keeps "0 findings"
+  // until a manual reload. Re-pull the reviews each time another run reaches
+  // a terminal state, so every column's findings arrive as its agent lands.
+  const terminalCount = runIds.filter((id) => {
+    const st = getLiveStatus(id, events) ?? runById.get(id)?.status ?? null;
+    return st === "done" || st === "failed" || st === "cancelled";
+  }).length;
+  const refetchReviews = reviewsQuery.refetch;
+  React.useEffect(() => {
+    if (terminalCount > 0) void refetchReviews?.();
+  }, [terminalCount, refetchReviews]);
   // Map runId → findings from the ReviewRecord
   const findingsByRunId = new Map<string, FindingRecord[]>();
   // Map runId → one-line summary text from ReviewRecord.summary (AC-12)

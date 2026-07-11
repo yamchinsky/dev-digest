@@ -156,6 +156,11 @@ _2026-07-10_ · Next dev console (port 3000); no graphql anywhere in the repo
 
 Bursts of `POST /graphql 404` right after a page load look like an app bug but are the Apollo Client Devtools Chrome extension probing every page for a GraphQL endpoint. Diagnosis path that settles it: `grep -ri graphql` over the repo (zero hits in code), `lsof -nP -i :3000` (only Chrome connections), and the burst-on-tab-reload timing. Verify by opening the studio in incognito (extensions off) — the spam disappears. Harmless noise; disable the extension for localhost if it bothers.
 
+### A page composing a POLLING query with a NON-polling one goes stale exactly when it matters
+_2026-07-11_ · `multi-agent-review/results` — `usePrRuns` (4s poll while running) + `usePrReviews` (no poll)
+
+The results page derives columns from two queries: run statuses (polls while any run is `running`) and reviews/findings (fetched once on mount). During a live multi-agent run the reviews query resolves BEFORE any review rows exist, so when runs finish, statuses flip to done but every column keeps "0 findings" until a manual reload — the page looks dead ("process not moving"). TanStack v5 has no per-query onSuccess, so the fix is the documented pattern: derive a `terminalCount` from run statuses/SSE events and `refetch()` the reviews query in a `useEffect` keyed on it — findings then arrive per-column as each agent lands. When two queries feed one view and only one auto-updates, ask what the OTHER one shows at the moment the first one changes.
+
 ## Session Notes
 _None yet._
 
