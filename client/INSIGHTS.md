@@ -161,6 +161,11 @@ _2026-07-11_ · `multi-agent-review/results` — `usePrRuns` (4s poll while runn
 
 The results page derives columns from two queries: run statuses (polls while any run is `running`) and reviews/findings (fetched once on mount). During a live multi-agent run the reviews query resolves BEFORE any review rows exist, so when runs finish, statuses flip to done but every column keeps "0 findings" until a manual reload — the page looks dead ("process not moving"). TanStack v5 has no per-query onSuccess, so the fix is the documented pattern: derive a `terminalCount` from run statuses/SSE events and `refetch()` the reviews query in a `useEffect` keyed on it — findings then arrive per-column as each agent lands. When two queries feed one view and only one auto-updates, ask what the OTHER one shows at the moment the first one changes.
 
+### Redirect-after-mutation + 30s staleTime + conditional polling = a three-factor freeze no single piece explains
+_2026-07-11_ · picker redirect → `/multi-agent-review/results`; `usePrRuns` vs `useRunMultiAgentReview`
+
+The picker's mutation invalidated only `["reviews", prId]`, then redirected. The PR page had populated `["pr-runs", prId]` seconds earlier, so the results page mounted onto a "fresh" (<30s staleTime) cached run list WITHOUT the new runs — no refetch. And `usePrRuns`'s conditional `refetchInterval` polls only while the CACHED data contains a `running` run, so the stale list (all old runs terminal) kept polling off too. Result: a page frozen until manual reload, with every individual piece looking correct. Server logs are the tell: after the redirect there is NO `GET /pulls/:id/runs` at all. Fix: mutations that create runs invalidate `["pr-runs", prId]` too, and `usePrRuns` sets `refetchOnMount: "always"` (run state is hot data). Rule: a mutation must invalidate EVERY query family its side effects touch — and a conditional poll gated on cached data is a deadlock waiting for exactly this staleness.
+
 ## Session Notes
 _None yet._
 
