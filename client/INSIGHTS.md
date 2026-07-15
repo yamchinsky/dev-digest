@@ -32,6 +32,8 @@ _2026-07-09_ · `client/src/vendor/ui/nav.ts`, `client/messages/en/shell.json`
 
 Adding a sidebar NAV item requires a `shell.nav.<key>` string in `messages/en/shell.json` whose key is byte-identical to the item's `key` in `nav.ts` — hyphens included (`multi-agent-review`, not a shortened alias). The `nav-i18n.test.ts` guard enforces this and fails with no hint that i18n is the cause when the key is missing or aliased. When adding a nav entry, add the matching `shell.nav.<key>` in the same change.
 
+> Updated 2026-07-15: the item's VISIBLE sidebar label is a SECOND, independent string — the literal `label` field on `NavItemDef` in `nav.ts`, rendered directly by `Sidebar`/`NavItem.tsx`. It is NOT the `shell.nav.<key>` value, which feeds only the command palette (`t('nav.'+key)` in `useShellCommands.ts`). `nav-i18n.test.ts` guards only the palette string, so a nav item can ship with correct `shell.json` wiring yet a stale/wrong literal `label` in `nav.ts`, and no test catches the mismatch. When adding or renaming a nav item, set BOTH the `label` and the `shell.nav.<key>` string.
+
 ## Codebase Patterns
 
 ### Chip `color` prop styles only the leading icon — chip border/background come from `active`
