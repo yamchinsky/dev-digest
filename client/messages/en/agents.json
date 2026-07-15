@@ -112,5 +112,22 @@
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."
+  },
+  "stats": {
+    "loadError": "Could not load this agent's stats.",
+    "runs": "Runs",
+    "findingsTotal": "Findings total",
+    "accepted": "Accepted",
+    "dismissed": "Dismissed",
+    "pending": "Pending",
+    "acceptRate": "Accept rate",
+    "avgCost": "Avg cost",
+    "avgDuration": "Avg duration",
+    "findingsBySeverity": "Findings by severity",
+    "trend": "Findings per run (recent)",
+    "empty": {
+      "title": "No runs yet",
+      "body": "Run this agent on a PR to start seeing its performance here."
+    }
   }
 }

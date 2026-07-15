@@ -321,6 +321,117 @@ export class AgentsRepository {
     }));
   }
 
+  // ---- agent performance aggregation (dashboard + per-agent Stats) --------
+
+  /**
+   * Per-run rows for `status='done'` runs inside a time window, workspace-scoped
+   * and optionally filtered to one agent. Carries exactly the fields the service
+   * folds into performance metrics: cost (via PriceBook — computed on read, never
+   * stored), latency, last-run, and the findings-per-run trend. Ordered
+   * oldest→newest so the service can slice the trend tail directly.
+   *
+   * Windowed by `ran_at`. Both the global dashboard (`GET /agents/performance`)
+   * and the per-agent Stats tab (`GET /agents/:id/stats`) call this, guaranteeing
+   * the two surfaces report identical numbers for the same agent + period.
+   */
+  async doneRunsInWindow(
+    workspaceId: string,
+    since: Date,
+    until: Date,
+    agentId?: string,
+  ): Promise<
+    Array<{
+      agentId: string | null;
+      model: string | null;
+      tokensIn: number | null;
+      tokensOut: number | null;
+      durationMs: number | null;
+      ranAt: Date | null;
+      findingsCount: number | null;
+    }>
+  > {
+    const agentFilter = agentId ? sql`AND agent_id = ${agentId}::uuid` : sql``;
+    const rows = await this.db.execute(sql`
+      SELECT agent_id AS "agentId",
+             model,
+             tokens_in AS "tokensIn",
+             tokens_out AS "tokensOut",
+             duration_ms AS "durationMs",
+             ran_at AS "ranAt",
+             findings_count AS "findingsCount"
+      FROM agent_runs
+      WHERE workspace_id = ${workspaceId}
+        AND status = 'done'
+        AND ran_at >= ${since.toISOString()}::timestamptz
+        AND ran_at < ${until.toISOString()}::timestamptz
+        ${agentFilter}
+      ORDER BY ran_at ASC
+    `);
+
+    return (rows as Array<Record<string, unknown>>).map((r) => ({
+      agentId: (r['agentId'] as string | null) ?? null,
+      model: (r['model'] as string | null) ?? null,
+      tokensIn: r['tokensIn'] == null ? null : Number(r['tokensIn']),
+      tokensOut: r['tokensOut'] == null ? null : Number(r['tokensOut']),
+      durationMs: r['durationMs'] == null ? null : Number(r['durationMs']),
+      ranAt: r['ranAt'] == null ? null : new Date(r['ranAt'] as string | number | Date),
+      findingsCount: r['findingsCount'] == null ? null : Number(r['findingsCount']),
+    }));
+  }
+
+  /**
+   * Per-agent findings aggregation in a time window: join `findings → reviews`
+   * and group by `reviews.agent_id`. Accept/dismiss counts drive the accept-rate
+   * (accepted / (accepted + dismissed)); the FILTERed counts drive
+   * findings_by_severity. Windowed by `reviews.created_at`. Optionally scoped to
+   * one agent (per-agent Stats tab).
+   */
+  async findingsAggInWindow(
+    workspaceId: string,
+    since: Date,
+    until: Date,
+    agentId?: string,
+  ): Promise<
+    Array<{
+      agentId: string;
+      findingsTotal: number;
+      accepted: number;
+      dismissed: number;
+      critical: number;
+      warning: number;
+      suggestion: number;
+    }>
+  > {
+    const agentFilter = agentId ? sql`AND r.agent_id = ${agentId}::uuid` : sql``;
+    const rows = await this.db.execute(sql`
+      SELECT r.agent_id AS "agentId",
+             count(f.id) AS "findingsTotal",
+             count(f.accepted_at) AS "accepted",
+             count(f.dismissed_at) AS "dismissed",
+             count(*) FILTER (WHERE f.severity = 'CRITICAL') AS "critical",
+             count(*) FILTER (WHERE f.severity = 'WARNING') AS "warning",
+             count(*) FILTER (WHERE f.severity = 'SUGGESTION') AS "suggestion"
+      FROM findings f
+      JOIN reviews r ON f.review_id = r.id
+      WHERE r.workspace_id = ${workspaceId}
+        AND r.agent_id IS NOT NULL
+        AND r.created_at >= ${since.toISOString()}::timestamptz
+        AND r.created_at < ${until.toISOString()}::timestamptz
+        ${agentFilter}
+      GROUP BY r.agent_id
+    `);
+
+    return (rows as Array<Record<string, unknown>>).map((r) => ({
+      agentId: r['agentId'] as string,
+      findingsTotal: Number(r['findingsTotal'] ?? 0),
+      accepted: Number(r['accepted'] ?? 0),
+      dismissed: Number(r['dismissed'] ?? 0),
+      critical: Number(r['critical'] ?? 0),
+      warning: Number(r['warning'] ?? 0),
+      suggestion: Number(r['suggestion'] ?? 0),
+    }));
+  }
+
   /**
    * Atomically replace the full context-doc set for an agent.
    * Single Drizzle transaction: DELETE all existing rows, then bulk INSERT

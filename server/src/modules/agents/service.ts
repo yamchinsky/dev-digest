@@ -2,10 +2,14 @@ import type { Container } from '../../platform/container.js';
 import type {
   Agent,
   AgentContextDoc,
+  AgentPerf,
+  AgentPerfRow,
   AgentSkillLink,
+  AgentStats,
   AgentVersion,
   CiFailOn,
   ModelInfo,
+  PerfCostSegment,
   Provider,
   ReviewStrategy,
 } from '@devdigest/shared';
@@ -25,6 +29,50 @@ import { toAgentDto, toAgentVersionDto } from './helpers.js';
 
 // Re-exported for backwards compatibility; implementation lives in ./helpers.
 export { toAgentDto } from './helpers.js';
+
+/** How many recent runs feed the per-agent sparkline trend. */
+const TREND_POINTS = 12;
+
+/** Trailing-30-days is the dashboard's default window when no bounds are given. */
+const DEFAULT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Rich internal per-agent aggregate. Both the global dashboard and the
+ * per-agent Stats tab derive from an array of these, so their numbers reconcile
+ * by construction. Cost is already folded (via PriceBook) at build time.
+ */
+interface AgentPerfRecord {
+  agentId: string;
+  agentName: string;
+  provider: string | null;
+  model: string | null;
+  runs: number;
+  findingsTotal: number;
+  accepted: number;
+  dismissed: number;
+  pending: number;
+  acceptRate: number | null;
+  dismissRate: number | null;
+  avgFindingsPerRun: number | null;
+  totalCostUsd: number | null;
+  avgCostUsd: number | null;
+  avgLatencyMs: number | null;
+  lastRunAt: string | null;
+  severity: { CRITICAL: number; WARNING: number; SUGGESTION: number };
+  trend: Array<{ ranAt: string | null; value: number }>;
+  costByModel: Map<string, number>;
+}
+
+/** Sort by accept-rate descending; agents with no acted-on findings sink last. */
+function byAcceptRateDesc(
+  a: { accept_rate: number | null },
+  b: { accept_rate: number | null },
+): number {
+  if (a.accept_rate == null && b.accept_rate == null) return 0;
+  if (a.accept_rate == null) return 1;
+  if (b.accept_rate == null) return -1;
+  return b.accept_rate - a.accept_rate;
+}
 
 export interface CreateAgentInput {
   name: string;
@@ -284,5 +332,231 @@ export class AgentsService {
     );
 
     return this.repo.getContextDocs(agentId);
+  }
+
+  // ---- performance aggregation (dashboard + per-agent Stats) --------------
+
+  /**
+   * Resolve the [since, until) window from optional ISO bounds. Absent bounds
+   * default to the trailing 30 days ending now — the dashboard's default period.
+   */
+  private resolveWindow(sinceIso?: string, untilIso?: string): { since: Date; until: Date } {
+    const until = untilIso ? new Date(untilIso) : new Date();
+    const since = sinceIso ? new Date(sinceIso) : new Date(until.getTime() - DEFAULT_WINDOW_MS);
+    return { since, until };
+  }
+
+  /**
+   * The single aggregation both performance surfaces share. Folds the two
+   * windowed queries (done runs + findings-by-agent) into one rich per-agent
+   * record; cost is computed on read via PriceBook (never persisted). When
+   * `agentId` is given, only that agent's record is built (per-agent Stats).
+   * Agents with zero runs in the window still get a record (runs=0, rates null)
+   * so the dashboard lists them.
+   */
+  private async buildAgentRecords(
+    workspaceId: string,
+    since: Date,
+    until: Date,
+    agentId?: string,
+  ): Promise<AgentPerfRecord[]> {
+    const agentRows = agentId
+      ? await this.repo.getById(workspaceId, agentId).then((a) => (a ? [a] : []))
+      : await this.repo.list(workspaceId);
+    if (agentRows.length === 0) return [];
+
+    const [runRows, findingRows] = await Promise.all([
+      this.repo.doneRunsInWindow(workspaceId, since, until, agentId),
+      this.repo.findingsAggInWindow(workspaceId, since, until, agentId),
+    ]);
+
+    const priceBook = this.container.priceBook;
+
+    // Group run rows by agent for an O(n) fold.
+    const runsByAgent = new Map<string, typeof runRows>();
+    for (const r of runRows) {
+      if (!r.agentId) continue;
+      const bucket = runsByAgent.get(r.agentId) ?? [];
+      bucket.push(r);
+      runsByAgent.set(r.agentId, bucket);
+    }
+    const findingByAgent = new Map(findingRows.map((f) => [f.agentId, f]));
+
+    return agentRows.map((agent) => {
+      const bucket = runsByAgent.get(agent.id) ?? [];
+      const runs = bucket.length;
+
+      let durSum = 0;
+      let durCount = 0;
+      let costSum = 0;
+      let costCount = 0;
+      let lastRun: Date | null = null;
+      const costByModel = new Map<string, number>();
+      const trend: Array<{ ranAt: string | null; value: number }> = [];
+
+      for (const r of bucket) {
+        if (r.durationMs != null) {
+          durSum += r.durationMs;
+          durCount += 1;
+        }
+        if (r.ranAt && (!lastRun || r.ranAt > lastRun)) lastRun = r.ranAt;
+        if (r.model && r.tokensIn != null && r.tokensOut != null) {
+          const c = priceBook.estimate(r.model, r.tokensIn, r.tokensOut);
+          if (c != null) {
+            costSum += c;
+            costCount += 1;
+            costByModel.set(r.model, (costByModel.get(r.model) ?? 0) + c);
+          }
+        }
+        trend.push({ ranAt: r.ranAt ? r.ranAt.toISOString() : null, value: r.findingsCount ?? 0 });
+      }
+
+      const f = findingByAgent.get(agent.id);
+      const findingsTotal = f?.findingsTotal ?? 0;
+      const accepted = f?.accepted ?? 0;
+      const dismissed = f?.dismissed ?? 0;
+      const acted = accepted + dismissed;
+
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        provider: agent.provider ?? null,
+        model: agent.model ?? null,
+        runs,
+        findingsTotal,
+        accepted,
+        dismissed,
+        pending: Math.max(0, findingsTotal - acted),
+        acceptRate: acted > 0 ? accepted / acted : null,
+        dismissRate: acted > 0 ? dismissed / acted : null,
+        avgFindingsPerRun: runs > 0 ? findingsTotal / runs : null,
+        // avg = total / runs so avg × runs reconciles to the cost breakdown total.
+        totalCostUsd: costCount > 0 ? costSum : null,
+        avgCostUsd: costCount > 0 && runs > 0 ? costSum / runs : null,
+        avgLatencyMs: durCount > 0 ? durSum / durCount : null,
+        lastRunAt: lastRun ? lastRun.toISOString() : null,
+        severity: {
+          CRITICAL: f?.critical ?? 0,
+          WARNING: f?.warning ?? 0,
+          SUGGESTION: f?.suggestion ?? 0,
+        },
+        trend: trend.slice(-TREND_POINTS),
+        costByModel,
+      };
+    });
+  }
+
+  /**
+   * Global Agent Performance dashboard aggregate (`GET /agents/performance`).
+   * Summary cards, one row per agent (default sort: accept-rate desc, nulls
+   * last), plus cost-by-agent and cost-by-model donut segments. Read-only:
+   * reads stored runs/findings, never triggers a review or model call.
+   */
+  async performance(workspaceId: string, sinceIso?: string, untilIso?: string): Promise<AgentPerf> {
+    const { since, until } = this.resolveWindow(sinceIso, untilIso);
+    const records = await this.buildAgentRecords(workspaceId, since, until);
+
+    const totalRuns = records.reduce((s, r) => s + r.runs, 0);
+
+    // Total cost = Σ per-agent cost (each already Σ per-run) so the two donut
+    // breakdowns sum back to this headline. null only if nothing priced.
+    let costSum = 0;
+    let anyCost = false;
+    const modelTotals = new Map<string, number>();
+    for (const r of records) {
+      if (r.totalCostUsd != null) {
+        costSum += r.totalCostUsd;
+        anyCost = true;
+      }
+      for (const [model, c] of r.costByModel) {
+        modelTotals.set(model, (modelTotals.get(model) ?? 0) + c);
+      }
+    }
+
+    const rated = records.filter((r) => r.acceptRate != null);
+    const avgAcceptRate =
+      rated.length > 0
+        ? rated.reduce((s, r) => s + (r.acceptRate as number), 0) / rated.length
+        : null;
+
+    const mostActive = records.filter((r) => r.runs > 0).sort((a, b) => b.runs - a.runs)[0];
+
+    const rows: AgentPerfRow[] = records
+      .map((r) => ({
+        agent_id: r.agentId,
+        agent_name: r.agentName,
+        provider: r.provider,
+        model: r.model,
+        runs: r.runs,
+        findings_total: r.findingsTotal,
+        accepted: r.accepted,
+        dismissed: r.dismissed,
+        accept_rate: r.acceptRate,
+        dismiss_rate: r.dismissRate,
+        avg_findings_per_run: r.avgFindingsPerRun,
+        total_cost_usd: r.totalCostUsd,
+        avg_cost_usd: r.avgCostUsd,
+        avg_latency_ms: r.avgLatencyMs,
+        last_run_at: r.lastRunAt,
+        findings_by_severity: r.severity,
+        trend: r.trend.map((p) => p.value),
+      }))
+      .sort(byAcceptRateDesc);
+
+    const cost_by_agent: PerfCostSegment[] = records
+      .filter((r) => r.totalCostUsd != null && r.totalCostUsd > 0)
+      .map((r) => ({ label: r.agentName, value: r.totalCostUsd as number }))
+      .sort((a, b) => b.value - a.value);
+
+    const cost_by_model: PerfCostSegment[] = [...modelTotals.entries()]
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value);
+
+    return {
+      summary: {
+        runs: totalRuns,
+        total_cost_usd: anyCost ? costSum : null,
+        avg_accept_rate: avgAcceptRate,
+        most_active_agent: mostActive ? mostActive.agentName : null,
+      },
+      agents: rows,
+      cost_by_agent,
+      cost_by_model,
+    };
+  }
+
+  /**
+   * Per-agent Stats (`GET /agents/:id/stats`) — the SAME aggregation as the
+   * dashboard, scoped to one agent, so the two surfaces report identical numbers
+   * for the same agent + period. Returns undefined when the agent isn't in this
+   * workspace (route → 404).
+   */
+  async agentStats(
+    workspaceId: string,
+    agentId: string,
+    sinceIso?: string,
+    untilIso?: string,
+  ): Promise<AgentStats | undefined> {
+    const { since, until } = this.resolveWindow(sinceIso, untilIso);
+    const [record] = await this.buildAgentRecords(workspaceId, since, until, agentId);
+    if (!record) return undefined;
+
+    return {
+      agent_id: record.agentId,
+      agent_name: record.agentName,
+      runs: record.runs,
+      findings_total: record.findingsTotal,
+      accepted: record.accepted,
+      dismissed: record.dismissed,
+      pending: record.pending,
+      accept_rate: record.acceptRate,
+      dismiss_rate: record.dismissRate,
+      avg_findings_per_run: record.avgFindingsPerRun,
+      total_cost_usd: record.totalCostUsd,
+      avg_cost_usd: record.avgCostUsd,
+      avg_latency_ms: record.avgLatencyMs,
+      findings_by_severity: record.severity,
+      trend: record.trend.map((p) => ({ label: p.ranAt ?? '', value: p.value })),
+    };
   }
 }

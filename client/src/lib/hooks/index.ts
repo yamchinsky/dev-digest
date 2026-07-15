@@ -16,3 +16,4 @@ export * from "./onboarding-tour";
 export * from "./brief";
 export * from "./evals";
 export * from "./ci";
+export * from "./performance";

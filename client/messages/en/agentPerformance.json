@@ -1,13 +1,23 @@
 {
   "title": "Agent Performance",
-  "subtitle": "Accept-rate is the headline quality signal · cost shown as a breakdown",
+  "subtitle": "Which agents earn their keep — accept rate is the quality signal",
   "loadError": "Could not load agent performance.",
+  "period": {
+    "d30": "30 days",
+    "d1": "1 day",
+    "custom": "Custom",
+    "since": "From",
+    "until": "To"
+  },
   "summary": {
     "totalRuns": "Total runs",
-    "avgAcceptRate": "Avg accept-rate",
+    "avgAcceptRate": "Avg accept rate",
     "totalCost": "Total cost",
-    "mostActive": "Most active"
+    "mostActive": "Most-active agent",
+    "mostActiveDetail": "{runs} runs · {rate} accept",
+    "noRuns": "No runs yet"
   },
+  "costBreakdownTitle": "Cost breakdown",
   "costByAgent": "Cost by agent",
   "costByModel": "Cost by model",
   "noCost": "No cost recorded yet.",
@@ -22,7 +32,11 @@
     "runs": "Runs",
     "findings": "Findings",
     "cost": "Cost",
-    "trend": "Trend"
+    "avgCost": "Avg cost",
+    "avgDuration": "Avg dur.",
+    "lastRun": "Last run",
+    "trend": "Trend",
+    "view": "View"
   },
   "empty": {
     "title": "No agent runs yet",
