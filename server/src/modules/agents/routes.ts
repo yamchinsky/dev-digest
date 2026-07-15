@@ -16,6 +16,12 @@ const VersionParams = z.object({
   version: z.coerce.number().int().positive(),
 });
 
+/** Optional [since, until) ISO window for the performance endpoints; default 30d. */
+const PerfQuery = z.object({
+  since: z.string().datetime().optional(),
+  until: z.string().datetime().optional(),
+});
+
 /**
  * A2 — agents module (owner A2).
  *   GET    /agents                  → list (workspace-scoped)
@@ -76,6 +82,13 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     return service.list(workspaceId);
   });
 
+  // Global Agent Performance dashboard. Registered before `/agents/:id` so the
+  // static segment is unambiguous (Fastify prefers static over parametric).
+  app.get('/agents/performance', { schema: { querystring: PerfQuery } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    return service.performance(workspaceId, req.query.since, req.query.until);
+  });
+
   app.get('/agents/:id', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(app.container, req);
     const agent = await service.get(workspaceId, req.params.id);
@@ -123,6 +136,23 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     if (!ok) throw new NotFoundError('Agent not found');
     return { ok: true };
   });
+
+  // Per-agent Stats — same aggregation as the dashboard, scoped to one agent.
+  app.get(
+    '/agents/:id/stats',
+    { schema: { params: IdParams, querystring: PerfQuery } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const stats = await service.agentStats(
+        workspaceId,
+        req.params.id,
+        req.query.since,
+        req.query.until,
+      );
+      if (!stats) throw new NotFoundError('Agent not found');
+      return stats;
+    },
+  );
 
   app.get('/agents/:id/versions', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(app.container, req);

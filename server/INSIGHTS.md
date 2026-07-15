@@ -131,6 +131,11 @@ _2026-07-09_ · `server/src/modules/ci/repository.ts`
 
 `onConflictDoUpdate` / `onConflictDoNothing` with an explicit `target: [colA, colB]` typechecks fine but Postgres rejects it at runtime — `"there is no unique or exclusion constraint matching the ON CONFLICT specification"` — unless those columns carry a matching DB-level UNIQUE index. `ci_installations(agent_id, repo, target_type)` had none, so every `open_pr` export threw 500 and cascaded into 4 red it-tests, all under a green typecheck. Either add the unique index in the migration, or fall back to a select-then-insert/update in the repository. Never infer `target` validity from a passing `tsc`.
 
+### Raw `db.execute(sql\`…\`)` on postgres-js does not serialize a `Date` param — bind ISO + cast `::timestamptz`
+_2026-07-15_ · `server/src/modules/agents/repository.ts` (`doneRunsInWindow`, `findingsAggInWindow`)
+
+Drizzle's `db.execute(sql\`…\`)` on the postgres-js driver routes params through `client.unsafe(query, params)`, which does NOT type-serialize JS values like the tagged-template `sql\`\`` path does. Binding a JS `Date` positionally (`ran_at >= ${sinceDate}`) passes `tsc` but throws on the FIRST live call: `The "string" argument must be of type string or an instance of Buffer or ArrayBuffer. Received an instance of Date`. Fix: bind `date.toISOString()` and cast in SQL — `ran_at >= ${iso}::timestamptz` — mirroring the `${id}::uuid` cast pattern in `lastDoneRunsPerAgent`. Same lesson as the sibling casts: raw-SQL param types are a runtime concern, invisible to the typecheck gate.
+
 ## Recurring Errors & Fixes
 
 ### Treat `agent_runs.status` and `pr_id` as nullable in TS even though they're runtime invariants
